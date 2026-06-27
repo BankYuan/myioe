@@ -1,0 +1,59 @@
+{% extends 'inventory/base.html' %}
+
+{% block title %}批量设置供应商 - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 class="mb-0"><i class="bi bi-truck me-1"></i>批量设置供应商</h4>
+                    <a href="{% url 'product_list' %}" class="btn btn-outline-secondary btn-sm">返回</a>
+                </div>
+
+                <p>款号:<strong>{{ model_no }}</strong> · 共 <strong>{{ products|length }}</strong> 个色码将一起更新</p>
+
+                <div class="table-responsive mb-3">
+                    <table class="table table-sm table-bordered">
+                        <thead class="table-light"><tr><th>条码</th><th>颜色</th><th>尺码</th><th>当前供应商</th></tr></thead>
+                        <tbody>
+                            {% for p in products %}
+                            <tr>
+                                <td><small>{{ p.barcode }}</small></td>
+                                <td>{{ p.color|default:'-' }}</td>
+                                <td>{{ p.size|default:'-' }}</td>
+                                <td>{% if p.supplier %}<span class="badge bg-secondary">{{ p.supplier.name }}</span>{% else %}<span class="text-muted">(无)</span>{% endif %}</td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="4" class="text-center text-muted py-3">该款号下没有商品(可能没填款号)</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {% if products %}
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="model_no" value="{{ model_no }}">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-8">
+                            <label class="form-label">选择供应商(将应用到上述全部色码)</label>
+                            <select name="supplier" class="form-select">
+                                <option value="">(清空供应商)</option>
+                                {% for s in suppliers %}
+                                <option value="{{ s.id }}">{{ s.name }}{{ s.contact_person|default:'' }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <button type="submit" class="btn btn-primary w-100"><i class="bi bi-check-lg me-1"></i>保存</button>
+                        </div>
+                    </div>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

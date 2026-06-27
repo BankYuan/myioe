@@ -4,9 +4,6 @@
 from .base import (
     system_settings,
     system_info,
-    store_settings, 
-    store_list,
-    delete_store,
     system_maintenance
 )
 
@@ -39,9 +36,6 @@ __all__ = [
     # 基础系统设置
     'system_settings',
     'system_info',
-    'store_settings',
-    'store_list',
-    'delete_store',
     'system_maintenance',
     
     # 日志管理

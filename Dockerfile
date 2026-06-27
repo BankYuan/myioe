@@ -36,8 +36,7 @@ RUN mkdir -p logs && chmod 777 logs
 # 收集静态文件
 RUN python manage.py collectstatic --noinput
 
-# 自动执行数据库迁移和创建超级用户
-RUN python manage.py migrate
+# 数据库迁移改在容器启动时执行(见 docker-compose 的 command),避免构建期数据库未就绪
 # 暴露端口
 EXPOSE 8000
 

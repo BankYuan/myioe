@@ -92,41 +92,4 @@ class SystemConfigForm(forms.ModelForm):
                 css_class='row mb-4'
             ),
             Submit('submit', '保存设置', css_class='btn btn-primary')
-        )
-
-
-class StoreForm(forms.ModelForm):
-    """商店表单"""
-    class Meta:
-        model = None  # 将在forms/__init__.py中设置正确的model
-        fields = ['name', 'address', 'phone', 'email', 'manager', 'is_active']
-        widgets = {
-            'name': forms.TextInput(attrs={'class': 'form-control'}),
-            'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'phone': forms.TextInput(attrs={'class': 'form-control'}),
-            'email': forms.EmailInput(attrs={'class': 'form-control'}),
-            'manager': forms.Select(attrs={'class': 'form-control form-select'}),
-            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-        }
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.helper = FormHelper()
-        self.helper.form_method = 'post'
-        
-        # 设置表单布局
-        self.helper.layout = Layout(
-            Row(
-                Column('name', css_class='form-group col-md-6 mb-0'),
-                Column('phone', css_class='form-group col-md-6 mb-0'),
-                css_class='form-row'
-            ),
-            'address',
-            Row(
-                Column('email', css_class='form-group col-md-6 mb-0'),
-                Column('manager', css_class='form-group col-md-6 mb-0'),
-                css_class='form-row'
-            ),
-            'is_active',
-            Submit('submit', '保存', css_class='btn btn-primary')
         ) 

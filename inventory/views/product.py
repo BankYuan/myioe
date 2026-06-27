@@ -17,11 +17,11 @@ from datetime import datetime
 
 from inventory.models import (
     Product, Category, ProductImage, ProductBatch,
-    Inventory, Supplier
+    Inventory, InventoryTransaction, Supplier
 )
 from inventory.forms import (
     ProductForm, CategoryForm, ProductBatchForm,
-    ProductImageFormSet, ProductBulkForm, ProductImportForm
+    ProductImageFormSet, ProductImportForm
 )
 from inventory.utils import generate_thumbnail, validate_csv
 from inventory.services import product_service
@@ -91,11 +91,12 @@ def product_list(request):
     category_id = request.GET.get('category', '')
     status = request.GET.get('status', 'active')  # 默认显示活跃商品
     sort_by = request.GET.get('sort', 'updated')  # 修改默认排序为更新时间
+    supplier_id = request.GET.get('supplier', '')
     
     print(f"DEBUG: 列表筛选参数 - 搜索: {search_query}, 分类: {category_id}, 状态: {status}, 排序: {sort_by}")
     
     # 基本查询集
-    products = Product.objects.select_related('category').all()
+    products = Product.objects.select_related('category', 'supplier').all()
     print(f"DEBUG: 初始查询集数量: {products.count()}")
     
     # 应用筛选
@@ -107,8 +108,20 @@ def product_list(request):
         )
     
     if category_id:
-        products = products.filter(category_id=category_id)
-    
+        try:
+            cat = Category.objects.get(id=category_id)
+            if cat.code and cat.code == cat.l1_code:
+                # 选的是一级类目:把它名下所有二级类目的商品也查出来
+                sub_ids = list(Category.objects.filter(l1_code=cat.code).values_list('id', flat=True))
+                products = products.filter(category_id__in=sub_ids)
+            else:
+                products = products.filter(category_id=category_id)
+        except Category.DoesNotExist:
+            products = products.filter(category_id=category_id)
+
+    if supplier_id:
+        products = products.filter(supplier_id=supplier_id)
+
     # 状态筛选
     if status == 'active':
         products = products.filter(is_active=True)
@@ -130,33 +143,100 @@ def product_list(request):
     else:  # 默认按更新时间降序
         products = products.order_by('-updated_at')
     
-    # 分页
-    paginator = Paginator(products, 15)  # 每页15个商品
+    # 批量取库存,避免 N+1
+    inv_map = {i.product_id: (i.quantity, i.warning_level)
+               for i in Inventory.objects.filter(product__in=products)}
+
+    # 按 model_no(款号)聚合成款组;无款号的按条码各自独立成组
+    from collections import OrderedDict
+    groups = OrderedDict()
+    for p in products:
+        key = p.model_no.strip() if (p.model_no and p.model_no.strip()) else f'_nobar_{p.barcode}'
+        g = groups.get(key)
+        if g is None:
+            g = {
+                'key': key, 'model_no': p.model_no, 'name': p.name,
+                'image': p.image, 'category': p.category, 'supplier': p.supplier,
+                'price': p.price, 'is_active': p.is_active,
+                'colors': [], 'sizes': [], 'skus': [], 'total_stock': 0, 'low_count': 0,
+                'updated_at': p.updated_at,
+            }
+            groups[key] = g
+        inv_info = inv_map.get(p.id)
+        stock = inv_info[0] if inv_info else 0
+        warning_level = inv_info[1] if inv_info else 1
+        # 款图可能挂在同款其他 SKU(款主)上,补全款组缩略图:任一 SKU 有图就用
+        if not g['image'] and p.image:
+            g['image'] = p.image
+        g['skus'].append({
+            'id': p.id, 'barcode': p.barcode, 'color': p.color, 'size': p.size,
+            'stock': stock, 'price': p.price, 'is_active': p.is_active,
+        })
+        g['total_stock'] += stock
+        if stock <= warning_level:
+            g['low_count'] += 1
+        if p.color and p.color not in g['colors']:
+            g['colors'].append(p.color)
+        if p.size and p.size not in g['sizes']:
+            g['sizes'].append(p.size)
+        if p.updated_at > g['updated_at']:
+            g['updated_at'] = p.updated_at
+    product_groups = list(groups.values())
+
+    # 款级分页(每页 20 款)
+    paginator = Paginator(product_groups, 20)
     page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
-    
-    # 获取分类列表用于筛选
-    categories = Category.objects.all().order_by('name')
-    
-    # 计算统计数据
+
+    # 当前页款组的图片池(列表缩略图点击可预览/切换该款所有图);批量查避免 N+1
+    page_model_nos = {g['model_no'] for g in page_obj.object_list if g.get('model_no')}
+    style_imgs = {}
+    if page_model_nos:
+        for pi in ProductImage.objects.filter(product__model_no__in=page_model_nos).select_related('product').order_by('order', 'id'):
+            style_imgs.setdefault(pi.product.model_no, []).append(pi.image.url)
+    for g in page_obj.object_list:
+        if g.get('model_no'):
+            g['images'] = style_imgs.get(g['model_no'], [])
+        else:
+            g['images'] = [g['image'].url] if g.get('image') else []
+
+    # 获取分类列表用于筛选(按一级类目分组的 optgroup)
+    from inventory.forms.product_forms import category_optgroup_choices
+    category_groups = [g for g in category_optgroup_choices() if g[0]]
+
+    # 统计
     total_products = Product.objects.count()
     active_products = Product.objects.filter(is_active=True).count()
-    
-    print(f"DEBUG: 总商品数: {total_products}, 活跃商品数: {active_products}, 当前页面商品数: {len(page_obj)}")
-    
+
     context = {
         'page_obj': page_obj,
-        'categories': categories,
+        'category_groups': category_groups,
         'search_query': search_query,
         'selected_category': category_id,
         'selected_status': status,
         'sort_by': sort_by,
+        'selected_supplier': supplier_id,
+        'suppliers': Supplier.objects.filter(is_active=True),
         'total_products': total_products,
         'active_products': active_products,
-        'products': page_obj,
+        'product_groups': page_obj,
     }
-    
+
     return render(request, 'inventory/product_list.html', context)
+
+
+@login_required
+def barcode_print(request):
+    """条码贴纸打印页:渲染每个 SKU 的贴纸(条码=scan_code + 文字=款号/颜色/尺码),浏览器打印到标签机。"""
+    ids = request.GET.get('ids', '')
+    if ids:
+        id_list = [i for i in ids.split(',') if i.isdigit()]
+        qs = Product.objects.filter(id__in=id_list).order_by('model_no', 'id') if id_list else Product.objects.none()
+    else:
+        qs = Product.objects.filter(is_active=True).order_by('model_no', 'id')
+    return render(request, 'inventory/product/barcode_print.html', {
+        'products': qs,
+    })
 
 
 @login_required
@@ -173,8 +253,8 @@ def product_detail(request, pk):
     # 获取商品批次信息
     batches = ProductBatch.objects.filter(product=product).order_by('-created_at')
     
-    # 获取商品图片
-    images = ProductImage.objects.filter(product=product).order_by('order')
+    # 获取商品图片(整款共享:聚合同款所有 SKU 的图)
+    images = _style_images(product)
     
     # 获取销售记录
     from inventory.models import SaleItem
@@ -191,6 +271,66 @@ def product_detail(request, pk):
     return render(request, 'inventory/product/product_detail.html', context)
 
 
+def _save_bulk_images(product, files):
+    """批量保存上传的图片(默认归主图,order 递增,生成缩略图)。供应商一堆图一次传,类型后续再整理。"""
+    base = -1
+    last = product.images.order_by('-order').first()
+    if last:
+        base = last.order
+    count = 0
+    for i, img in enumerate(files):
+        pi = ProductImage(product=product, image=img, image_type='main', order=base + 1 + i)
+        try:
+            thumbnail = generate_thumbnail(img, (300, 300))
+            thumb_name = f'thumb_{uuid.uuid4()}.jpg'
+            thumb_path = f'products/thumbnails/{thumb_name}'
+            thumb_file = io.BytesIO()
+            thumbnail.save(thumb_file, format='JPEG')
+            pi.thumbnail = thumb_path
+        except Exception:
+            pass
+        pi.save()
+        count += 1
+    return count
+
+
+def _style_owner(product):
+    """款主 SKU:同款 model_no 中 id 最小的存活 SKU;无 model_no 或整款已停用则返回自己。
+
+    图片统一归到款主,保证款内只存一份、不重复;展示则跨该款所有 SKU 聚合。
+    """
+    if not product.model_no:
+        return product
+    owner = Product.objects.filter(model_no=product.model_no, is_active=True).order_by('id').first()
+    return owner or product
+
+
+def _style_images(product):
+    """该款(model_no)的图片池:聚合同款所有 SKU 的图片,按 order/id 排序;无 model_no 则取自身。"""
+    if not product.model_no:
+        return list(product.images.all())
+    pks = list(Product.objects.filter(model_no=product.model_no).values_list('pk', flat=True))
+    return list(ProductImage.objects.filter(product__in=pks).order_by('order', 'id'))
+
+
+def _sync_style_main_image(product):
+    """把款主图回填到整款所有 SKU 的 product.image 字段。
+
+    图片按款共享存在 ProductImage 表(挂款主 SKU),但销售详情/商品详情/列表等显示用
+    Product.image 字段,所以保存图片后要把款主图同步到该款每个 SKU,显示才一致。
+    """
+    style_imgs = _style_images(product)
+    main_img = next((i for i in style_imgs if i.image_type == 'main'), None) or (style_imgs[0] if style_imgs else None)
+    if not main_img or not main_img.image:
+        return
+    name = main_img.image.name
+    if product.model_no:
+        Product.objects.filter(model_no=product.model_no).exclude(image=name).update(image=name)
+    elif product.image.name != name:
+        product.image.name = name
+        product.save(update_fields=['image'])
+
+
 @login_required
 def product_create(request):
     """创建商品视图"""
@@ -202,36 +342,17 @@ def product_create(request):
         if form.is_valid():
             # 保存商品数据
             product = form.save(commit=False)
-            product.created_by = request.user
             product.is_active = True  # 确保商品默认为活跃状态
             product.save()
             
-            # 只有当图片表单集有效时才处理图片
-            if image_formset.is_valid():
-                # 保存商品图片
-                for image_form in image_formset:
-                    if image_form.cleaned_data and not image_form.cleaned_data.get('DELETE'):
-                        image = image_form.save(commit=False)
-                        image.product = product
-                        
-                        # 处理图片文件
-                        if image.image:
-                            # 生成缩略图
-                            thumbnail = generate_thumbnail(image.image, (300, 300))
-                            
-                            # 保存缩略图
-                            thumb_name = f'thumb_{uuid.uuid4()}.jpg'
-                            thumb_path = f'products/thumbnails/{thumb_name}'
-                            thumb_file = io.BytesIO()
-                            thumbnail.save(thumb_file, format='JPEG')
-                            
-                            # 设置缩略图路径
-                            image.thumbnail = thumb_path
-                        
-                        image.save()
-            
+            # 图片走批量上传 → 款主 SKU(整款共享,不重复存)
+            _save_bulk_images(_style_owner(product), request.FILES.getlist('bulk_images'))
+
+            # 同步款主图到整款所有 SKU 的 product.image(列表/销售/API 显示一致)
+            _sync_style_main_image(product)
+
             # 创建初始库存记录
-            warning_level = 10  # 设置一个默认的预警值
+            warning_level = 1  # 默认预警:库存 <= 1 报警
             if 'warning_level' in form.cleaned_data and form.cleaned_data['warning_level'] is not None:
                 warning_level = form.cleaned_data['warning_level']
                 
@@ -263,12 +384,13 @@ def product_create(request):
     
     context = {
         'form': form,
-        'image_formset': image_formset,
+        'style_images': [],
+        'image_types': ProductImage.IMAGE_TYPES,
         'title': '创建商品',
         'submit_text': '保存商品',
         'next': request.GET.get('next', '')
     }
-    
+
     return render(request, 'inventory/product/product_form.html', context)
 
 
@@ -286,39 +408,26 @@ def product_update(request, pk):
             # 保存商品数据
             product = form.save(commit=False)
             product.updated_at = timezone.now()
-            product.updated_by = request.user
             product.save()
             
-            # 只有当图片表单集有效时才处理图片
-            if image_formset.is_valid():
-                # 保存商品图片
-                for image_form in image_formset:
-                    if image_form.cleaned_data:
-                        if image_form.cleaned_data.get('DELETE'):
-                            if image_form.instance.pk:
-                                image_form.instance.delete()
-                        else:
-                            image = image_form.save(commit=False)
-                            image.product = product
-                            
-                            # 处理图片文件
-                            if image.image and not image.thumbnail:
-                                # 生成缩略图
-                                thumbnail = generate_thumbnail(image.image, (300, 300))
-                                
-                                # 保存缩略图
-                                thumb_name = f'thumb_{uuid.uuid4()}.jpg'
-                                thumb_path = f'products/thumbnails/{thumb_name}'
-                                thumb_file = io.BytesIO()
-                                thumbnail.save(thumb_file, format='JPEG')
-                                
-                                # 设置缩略图路径
-                                image.thumbnail = thumb_path
-                            
-                            image.save()
-            
+            # 款图片:改类型 / 删除(基于 image id,操作整款所有 SKU 的图)
+            for img in _style_images(product):
+                if request.POST.get('img_del_%d' % img.id) == '1':
+                    img.delete()
+                    continue
+                new_type = request.POST.get('img_type_%d' % img.id)
+                if new_type and new_type != img.image_type:
+                    img.image_type = new_type
+                    img.save(update_fields=['image_type'])
+
+            # 批量上传 → 款主 SKU(整款共享)
+            _save_bulk_images(_style_owner(product), request.FILES.getlist('bulk_images'))
+
+            # 同步款主图到整款所有 SKU 的 product.image(列表/销售/API 显示一致)
+            _sync_style_main_image(product)
+
             # 更新库存预警级别
-            warning_level = 10  # 设置一个默认的预警值
+            warning_level = 1  # 默认预警:库存 <= 1 报警
             if 'warning_level' in form.cleaned_data and form.cleaned_data['warning_level'] is not None:
                 warning_level = form.cleaned_data['warning_level']
                 
@@ -349,12 +458,13 @@ def product_update(request, pk):
     
     context = {
         'form': form,
-        'image_formset': image_formset,
+        'style_images': _style_images(product),
+        'image_types': ProductImage.IMAGE_TYPES,
         'product': product,
         'title': f'编辑商品: {product.name}',
         'submit_text': '更新商品'
     }
-    
+
     return render(request, 'inventory/product/product_form.html', context)
 
 
@@ -365,14 +475,31 @@ def product_delete(request, pk):
     
     if request.method == 'POST':
         product_name = product.name
-        
-        # 标记为不活跃而不是真的删除
-        product.is_active = False
-        product.updated_at = timezone.now()
-        product.updated_by = request.user
-        product.save()
-        
-        messages.success(request, f'商品 {product_name} 已标记为不活跃')
+        if request.POST.get('force') == '1':
+            # 彻底删除:先把该 SKU 名下的款图片迁移给同款其他存活 SKU(图随款走,不丢),
+            # 再级联清理库存/流水/销售,最后物理删商品(ProductBatch 为 CASCADE 会一并删)
+            if product.model_no:
+                # 图随款走:迁给同款其他存活 SKU(优先活跃),再回填主图字段,避免删后漏图
+                other = (Product.objects.filter(model_no=product.model_no, is_active=True).exclude(pk=product.pk).order_by('id').first()
+                         or Product.objects.filter(model_no=product.model_no).exclude(pk=product.pk).order_by('id').first())
+                if other:
+                    ProductImage.objects.filter(product=product).update(product=other)
+                    _sync_style_main_image(other)
+            Inventory.objects.filter(product=product).delete()
+            InventoryTransaction.objects.filter(product=product).delete()
+            try:
+                from inventory.models import SaleItem
+                SaleItem.objects.filter(product=product).delete()
+            except Exception:
+                pass
+            product.delete()
+            messages.success(request, f'商品「{product_name}」已彻底删除(含库存/流水/销售记录)')
+        else:
+            # 默认:停用(软删除,保留账目数据)
+            product.is_active = False
+            product.updated_at = timezone.now()
+            product.save()
+            messages.success(request, f'商品「{product_name}」已停用')
         return redirect('product_list')
     
     return render(request, 'inventory/product/product_confirm_delete.html', {
@@ -381,239 +508,26 @@ def product_delete(request, pk):
 
 
 @login_required
-def product_category_list(request):
-    """商品分类列表视图"""
-    # 获取筛选参数
-    search_query = request.GET.get('search', '')
-    status = request.GET.get('status', '')
-    
-    # 基本查询集
-    categories = Category.objects.all()
-    
-    # 应用筛选
-    if search_query:
-        categories = categories.filter(name__icontains=search_query)
-    
-    if status == 'active':
-        categories = categories.filter(is_active=True)
-    elif status == 'inactive':
-        categories = categories.filter(is_active=False)
-    
-    # 添加商品计数
-    categories = categories.annotate(product_count=Count('product'))
-    
-    # 排序
-    categories = categories.order_by('name')
-    
-    # 计算统计数据
-    total_categories = Category.objects.count()
-    active_categories = Category.objects.filter(is_active=True).count()
-    
-    context = {
-        'categories': categories,
-        'search_query': search_query,
-        'selected_status': status,
-        'total_categories': total_categories,
-        'active_categories': active_categories,
-    }
-    
-    return render(request, 'inventory/product/category_list.html', context)
-
-
-@login_required
-def product_category_create(request):
-    """创建商品分类视图"""
+def batch_update_supplier(request):
+    """按款号批量设置/修改该款所有色码的主供应商。"""
+    from inventory.models import Supplier
     if request.method == 'POST':
-        form = CategoryForm(request.POST)
-        if form.is_valid():
-            category = form.save()
-            messages.success(request, f'分类 {category.name} 创建成功')
-            return redirect('product_category_list')
-    else:
-        form = CategoryForm()
-    
-    context = {
-        'form': form,
-        'title': '创建商品分类',
-        'submit_text': '保存分类'
-    }
-    
-    return render(request, 'inventory/product/category_form.html', context)
-
-
-@login_required
-def product_category_update(request, pk):
-    """更新商品分类视图"""
-    category = get_object_or_404(Category, pk=pk)
-    
-    if request.method == 'POST':
-        form = CategoryForm(request.POST, instance=category)
-        if form.is_valid():
-            category = form.save()
-            messages.success(request, f'分类 {category.name} 更新成功')
-            return redirect('product_category_list')
-    else:
-        form = CategoryForm(instance=category)
-    
-    context = {
-        'form': form,
-        'category': category,
-        'title': f'编辑分类: {category.name}',
-        'submit_text': '更新分类'
-    }
-    
-    return render(request, 'inventory/product/category_form.html', context)
-
-
-@login_required
-def product_category_delete(request, pk):
-    """删除商品分类视图"""
-    category = get_object_or_404(Category, pk=pk)
-    
-    # 检查该分类是否有关联的商品
-    product_count = Product.objects.filter(category=category).count()
-    
-    if request.method == 'POST':
-        if product_count > 0 and not request.POST.get('force_delete'):
-            messages.error(request, f'分类 {category.name} 下有 {product_count} 个商品，无法删除')
-            return redirect('product_category_list')
-        
-        category_name = category.name
-        
-        if product_count > 0:
-            # 将关联的商品分类设为空
-            Product.objects.filter(category=category).update(category=None)
-        
-        # 标记为不活跃而不是真的删除
-        category.is_active = False
-        category.save()
-        
-        messages.success(request, f'分类 {category_name} 已标记为不活跃')
-        return redirect('product_category_list')
-    
-    context = {
-        'category': category,
-        'product_count': product_count
-    }
-    
-    return render(request, 'inventory/product/category_confirm_delete.html', context)
-
-
-@login_required
-def product_batch_create(request, product_id):
-    """创建商品批次视图"""
-    product = get_object_or_404(Product, pk=product_id)
-    
-    if request.method == 'POST':
-        form = ProductBatchForm(request.POST)
-        if form.is_valid():
-            batch = form.save(commit=False)
-            batch.product = product
-            batch.created_by = request.user
-            batch.save()
-            
-            messages.success(request, f'批次 {batch.batch_number} 创建成功')
-            return redirect('product_detail', pk=product.id)
-    else:
-        # 生成一个默认的批次号
-        current_date = datetime.now().strftime('%Y%m%d')
-        next_batch_number = f'{product.id}-{current_date}'
-        
-        form = ProductBatchForm(initial={
-            'batch_number': next_batch_number,
-            'quantity': 0
-        })
-    
-    context = {
-        'form': form,
-        'product': product,
-        'title': f'为 {product.name} 创建批次',
-        'submit_text': '保存批次'
-    }
-    
-    return render(request, 'inventory/product/batch_form.html', context)
-
-
-@login_required
-def product_batch_update(request, pk):
-    """更新商品批次视图"""
-    batch = get_object_or_404(ProductBatch, pk=pk)
-    product = batch.product
-    
-    if request.method == 'POST':
-        form = ProductBatchForm(request.POST, instance=batch)
-        if form.is_valid():
-            batch = form.save()
-            messages.success(request, f'批次 {batch.batch_number} 更新成功')
-            return redirect('product_detail', pk=product.id)
-    else:
-        form = ProductBatchForm(instance=batch)
-    
-    context = {
-        'form': form,
-        'batch': batch,
-        'product': product,
-        'title': f'编辑批次: {batch.batch_number}',
-        'submit_text': '更新批次'
-    }
-    
-    return render(request, 'inventory/product/batch_form.html', context)
-
-
-@login_required
-def product_bulk_create(request):
-    """批量创建商品视图"""
-    if request.method == 'POST':
-        form = ProductBulkForm(request.POST)
-        if form.is_valid():
-            category = form.cleaned_data['category']
-            name_prefix = form.cleaned_data['name_prefix']
-            name_suffix_start = form.cleaned_data.get('name_suffix_start', 1)
-            name_suffix_end = form.cleaned_data.get('name_suffix_end', 10)
-            retail_price = form.cleaned_data['retail_price']
-            wholesale_price = form.cleaned_data.get('wholesale_price')
-            cost_price = form.cleaned_data.get('cost_price')
-            
-            created_count = 0
-            
-            # 创建批量商品
-            for i in range(name_suffix_start, name_suffix_end + 1):
-                product_name = f"{name_prefix}{i}"
-                
-                # 检查商品是否已存在
-                if Product.objects.filter(name=product_name).exists():
-                    continue
-                
-                product = Product.objects.create(
-                    name=product_name,
-                    category=category,
-                    retail_price=retail_price,
-                    wholesale_price=wholesale_price or retail_price,
-                    cost_price=cost_price or retail_price * 0.7,
-                    created_by=request.user
-                )
-                
-                # 创建库存记录
-                Inventory.objects.create(
-                    product=product,
-                    quantity=0,
-                    warning_level=5
-                )
-                
-                created_count += 1
-            
-            messages.success(request, f'成功创建 {created_count} 个商品')
+        model_no = (request.POST.get('model_no') or '').strip()
+        supplier_id = request.POST.get('supplier') or ''
+        supplier = Supplier.objects.filter(id=supplier_id).first() if supplier_id else None
+        if not model_no:
+            messages.error(request, '缺少款号')
             return redirect('product_list')
-    else:
-        form = ProductBulkForm()
-    
-    context = {
-        'form': form,
-        'title': '批量创建商品',
-        'submit_text': '创建商品'
-    }
-    
-    return render(request, 'inventory/product/product_bulk_form.html', context)
+        count = Product.objects.filter(model_no=model_no).update(supplier=supplier)
+        messages.success(request, f'款号「{model_no}」的 {count} 个色码已设置供应商:{supplier.name if supplier else "(已清空)"}')
+        return redirect('product_list')
+    model_no = request.GET.get('model_no', '')
+    products = Product.objects.filter(model_no=model_no) if model_no else []
+    return render(request, 'inventory/product/batch_supplier_form.html', {
+        'model_no': model_no,
+        'products': products,
+        'suppliers': Supplier.objects.filter(is_active=True),
+    })
 
 
 @login_required
@@ -625,11 +539,11 @@ def product_import(request):
             csv_file = request.FILES['csv_file']
             
             # 验证CSV文件
-            validation_result = validate_csv(csv_file, 
-                                            required_headers=['name', 'retail_price'],
-                                            expected_headers=['name', 'category', 'retail_price', 
-                                                            'wholesale_price', 'cost_price', 
-                                                            'barcode', 'sku', 'specification'])
+            validation_result = validate_csv(csv_file,
+                                            required_headers=['name', 'price'],
+                                            expected_headers=['name', 'category', 'price', 'cost',
+                                                            'barcode', 'model_no', 'color', 'size',
+                                                            'specification', 'manufacturer'])
             
             if not validation_result['valid']:
                 messages.error(request, f"CSV文件验证失败: {validation_result['errors']}")
@@ -663,9 +577,9 @@ def product_import(request):
     
     # 生成样例CSV数据
     sample_data = [
-        ['name', 'category', 'retail_price', 'wholesale_price', 'cost_price', 'barcode', 'sku', 'specification'],
-        ['测试商品1', '水果', '10.00', '8.00', '6.00', '123456789', 'SKU001', '500g'],
-        ['测试商品2', '蔬菜', '5.50', '4.50', '3.00', '987654321', 'SKU002', '1kg'],
+        ['name', 'category', 'price', 'cost', 'barcode', 'model_no', 'color', 'size', 'specification'],
+        ['示例板鞋A', '运动休闲', '399.00', '240.00', '6900000000001', 'SKU-BOARD-A', 'white', '41', '41码'],
+        ['示例板鞋A', '运动休闲', '399.00', '240.00', '6900000000002', 'SKU-BOARD-A', 'white', '42', '42码'],
     ]
     
     # 创建内存中的CSV
@@ -709,19 +623,20 @@ def product_export(request):
     
     # 写入CSV
     writer = csv.writer(response)
-    writer.writerow(['ID', '名称', '分类', '零售价', '批发价', '成本价', '条码', 'SKU', '规格', '状态'])
+    writer.writerow(['ID', '名称', '分类', '款号', '售价', '成本价', '条码', '规格', '颜色', '尺码', '状态'])
     
     for product in products:
         writer.writerow([
             product.id,
             product.name,
             product.category.name if product.category else '',
-            product.retail_price,
-            product.wholesale_price,
-            product.cost_price,
+            product.model_no or '',
+            product.price,
+            product.cost,
             product.barcode or '',
-            product.sku or '',
             product.specification or '',
+            product.get_color_display() if product.color else '',
+            product.get_size_display() if product.size else '',
             '启用' if product.is_active else '禁用',
         ])
     

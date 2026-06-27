@@ -1,0 +1,139 @@
+{% extends 'inventory/base.html' %}
+
+{% block title %}批量进货录入 - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 class="card-title mb-0">
+                            <i class="bi {% if direction == 'out' %}bi-box-arrow-up{% else %}bi-bag-plus{% endif %} me-1"></i>
+                            {% if direction == 'out' %}批量退货出库{% else %}批量进货录入{% endif %}
+                        </h2>
+                        {% if from_ai and direction == 'out' %}
+                        <p class="text-warning mb-0">⚠ AI 识别为 <strong>退货单</strong>:按 款号+尺码+颜色 匹配现有商品 <strong>退货出库</strong>(退给供应商)。商品必须已在库,库存不足或无档案的行会跳过并在提交后提示。下方类目/成本无需填。</p>
+                        {% elif from_ai %}
+                        <p class="text-success mb-0">✓ AI 已预填 {{ recognized_count }} 款。请补 <strong>鞋类目</strong> 和 <strong>成本</strong>,核对数量后提交。</p>
+                        {% elif direction == 'out' %}
+                        <p class="text-muted mb-0">退货出库:一行一款,按 款号+尺码+颜色 匹配现有商品扣库存(退给供应商)。商品须已在库。</p>
+                        {% else %}
+                        <p class="text-muted mb-0">一行一款,填完提交自动建档 + 入库(新款建档,同款补货加库存)。</p>
+                        {% endif %}
+                    </div>
+                    <a href="{% url 'inventory_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> 返回</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<form method="post" action="{% url 'batch_purchase_create' %}">
+    {% csrf_token %}
+    {{ formset.management_form }}
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-3 pb-2 border-bottom">
+                <span class="fw-bold">单据方向:</span>
+                <div class="btn-group btn-group-sm" role="group">
+                    <input type="radio" class="btn-check" name="direction" id="dir_in" value="in" autocomplete="off" {% if direction != 'out' %}checked{% endif %}>
+                    <label class="btn btn-outline-success" for="dir_in"><i class="bi bi-box-arrow-in-down"></i> 进货(入库 +)</label>
+                    <input type="radio" class="btn-check" name="direction" id="dir_out" value="out" autocomplete="off" {% if direction == 'out' %}checked{% endif %}>
+                    <label class="btn btn-outline-warning" for="dir_out"><i class="bi bi-box-arrow-up"></i> 退货(出库 −)</label>
+                </div>
+                <span class="text-muted small" id="dir-hint">{% if direction == 'out' %}退货:按 款号+尺码+颜色 匹配现有商品出库,不建档{% else %}进货:新款自动建档 + 入库{% endif %}</span>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                <span class="fw-bold"><i class="bi bi-truck me-1"></i>供应商:</span>
+                <select name="supplier" class="form-select form-select-sm" style="width:auto;max-width:200px">
+                    <option value="">(不关联)</option>
+                    {% for s in suppliers %}
+                    <option value="{{ s.id }}">{{ s.name }}</option>
+                    {% endfor %}
+                </select>
+                <span class="fw-bold ms-2"><i class="bi bi-calendar me-1"></i>进货日期:</span>
+                <input type="date" name="purchase_date" class="form-control form-control-sm" style="width:auto" value="{{ purchase_date|default:'' }}">
+                <span class="text-muted small">留空用操作当天;AI 识别会自动填单据日期</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle" id="batch-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:11%">款号</th>
+                            <th style="width:16%">商品名</th>
+                            <th style="width:15%">鞋类目</th>
+                            <th style="width:7%">尺码</th>
+                            <th style="width:8%">颜色</th>
+                            <th style="width:9%">售价</th>
+                            <th style="width:9%">成本</th>
+                            <th style="width:7%">数量</th>
+                            <th style="width:4%"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in formset %}
+                        <tr class="batch-row">
+                            <td>{{ f.model_no }}</td>
+                            <td>{{ f.name }}</td>
+                            <td>{{ f.category }}</td>
+                            <td>{{ f.size }}</td>
+                            <td>{{ f.color }}</td>
+                            <td>{{ f.price }}</td>
+                            <td>{{ f.cost }}</td>
+                            <td>{{ f.quantity }}</td>
+                            <td><button type="button" class="btn btn-sm btn-outline-danger del-row py-0 px-1">×</button></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="add-row"><i class="bi bi-plus"></i> 增加一行</button>
+        </div>
+    </div>
+    <button type="submit" id="submit-btn" class="btn {% if direction == 'out' %}btn-warning{% else %}btn-success{% endif %} btn-lg"><i class="bi bi-check-lg me-1"></i><span id="submit-text">{% if direction == 'out' %}确认提交(退货出库){% else %}确认提交(建档 + 入库){% endif %}</span></button>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const TOTAL = document.getElementById('id_form-TOTAL_FORMS');
+const tbody = document.querySelector('#batch-table tbody');
+// 克隆第一行作模板(清空值)
+const tpl = tbody.querySelector('tr.batch-row').cloneNode(true);
+tpl.querySelectorAll('input,select').forEach(el => { el.value = ''; });
+
+document.getElementById('add-row').addEventListener('click', () => {
+    const idx = parseInt(TOTAL.value);
+    const row = tpl.cloneNode(true);
+    row.querySelectorAll('input,select').forEach(el => {
+        el.name = el.name.replace(/form-\d+-/, `form-${idx}-`);
+        el.id = el.id.replace(/id_form-\d+-/, `id_form-${idx}-`);
+    });
+    tbody.appendChild(row);
+    TOTAL.value = idx + 1;
+});
+
+tbody.addEventListener('click', e => {
+    if (e.target.classList.contains('del-row')) {
+        const rows = document.querySelectorAll('#batch-table tbody tr');
+        if (rows.length > 1) e.target.closest('tr').remove();
+    }
+});
+
+// 切换单据方向:同步提示 / 按钮文案与配色
+document.querySelectorAll('input[name="direction"]').forEach(r => {
+    r.addEventListener('change', function() {
+        const out = this.value === 'out';
+        document.getElementById('dir-hint').textContent = out
+            ? '退货:按 款号+尺码+颜色 匹配现有商品出库,不建档'
+            : '进货:新款自动建档 + 入库';
+        const btn = document.getElementById('submit-btn');
+        btn.classList.toggle('btn-warning', out);
+        btn.classList.toggle('btn-success', !out);
+        document.getElementById('submit-text').textContent = out ? '确认提交(退货出库)' : '确认提交(建档 + 入库)';
+    });
+});
+</script>
+{% endblock %}

@@ -7,7 +7,7 @@ import random
 from faker import Faker
 import datetime
 
-from inventory.models.product import Product, Category, Store
+from inventory.models.product import Product, Category
 from inventory.models.member import Member, MemberLevel
 from inventory.models.sales import Sale, SaleItem
 from inventory.models.inventory import Inventory

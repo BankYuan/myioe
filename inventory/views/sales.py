@@ -15,6 +15,7 @@ from django.utils.safestring import mark_safe
 from django.urls import reverse
 
 from inventory.models import Sale, SaleItem, Inventory, InventoryTransaction, Member, MemberTransaction, OperationLog, Product, Category, Supplier, MemberLevel
+from inventory.models.inventory import update_inventory
 from inventory.forms import SaleForm, SaleItemForm
 from inventory.utils.query_utils import paginate_queryset
 
@@ -404,19 +405,16 @@ def sale_create(request):
                         sale_item = SaleItem.objects.get(id=sale_item.id)
                         print(f"重新加载后的SaleItem - ID: {sale_item.id}, 价格: {sale_item.price}, 小计: {sale_item.subtotal}")
                         
-                        # 更新库存
-                        inventory_obj = item_data['inventory']
-                        inventory_obj.quantity -= item_data['quantity']
-                        inventory_obj.save()
-                        
-                        # 创建库存交易记录
-                        InventoryTransaction.objects.create(
+                        # 扣库存(走 update_inventory:行锁+写流水+预警)
+                        ok, inv, err = update_inventory(
                             product=item_data['product'],
+                            quantity=-item_data['quantity'],
                             transaction_type='OUT',
-                            quantity=item_data['quantity'],
                             operator=request.user,
-                            notes=f'销售单号：{sale.id}'
+                            notes=f'销售单 #{sale.id}'
                         )
+                        if not ok:
+                            raise Exception(f"扣库存失败: {err}")
                         
                         # 记录操作日志
                         OperationLog.objects.create(
@@ -508,19 +506,19 @@ def sale_item_create(request, sale_id):
             
             inventory = Inventory.objects.get(product=sale_item.product)
             if inventory.quantity >= sale_item.quantity:
-                inventory.quantity -= sale_item.quantity
-                inventory.save()
-                
+                ok, inv, err = update_inventory(
+                    product=sale_item.product,
+                    quantity=-sale_item.quantity,
+                    transaction_type='OUT',
+                    operator=request.user,
+                    notes=f'销售单 #{sale.id}'
+                )
+                if not ok:
+                    messages.error(request, f'扣库存失败: {err}')
+                    return redirect('sale_detail', sale_id=sale.id)
+
                 sale_item.save()
                 sale.update_total_amount()
-                
-                transaction = InventoryTransaction.objects.create(
-                    product=sale_item.product,
-                    transaction_type='OUT',
-                    quantity=sale_item.quantity,
-                    operator=request.user,
-                    notes=f'销售单号：{sale.id}'
-                )
                 
                 messages.success(request, '商品添加成功')
                 
@@ -655,17 +653,12 @@ def sale_cancel(request, sale_id):
     if request.method == 'POST':
         reason = request.POST.get('reason', '')
         
-        # 恢复库存
+        # 恢复库存(取消销售单回库)
         for item in sale.items.all():
-            inventory = Inventory.objects.get(product=item.product)
-            inventory.quantity += item.quantity
-            inventory.save()
-            
-            # 创建入库交易记录
-            InventoryTransaction.objects.create(
+            update_inventory(
                 product=item.product,
-                transaction_type='IN',
                 quantity=item.quantity,
+                transaction_type='IN',
                 operator=request.user,
                 notes=f'取消销售单 #{sale.id} 恢复库存'
             )
@@ -696,22 +689,15 @@ def sale_delete_item(request, sale_id, item_id):
     item = get_object_or_404(SaleItem, id=item_id, sale=sale)
     
     # 检查销售单状态
-    if sale.status == 'COMPLETED':
-        messages.error(request, '已完成的销售单不能修改')
-        return redirect('sale_detail', sale_id=sale.id)
+    # 顾客退货:允许对已完成销售单退货(删商品+回库);退款请线下处理
     
-    # 恢复库存
-    inventory = Inventory.objects.get(product=item.product)
-    inventory.quantity += item.quantity
-    inventory.save()
-    
-    # 创建入库交易记录
-    InventoryTransaction.objects.create(
+    # 恢复库存(删除销售商品回库)
+    update_inventory(
         product=item.product,
-        transaction_type='IN',
         quantity=item.quantity,
+        transaction_type='IN',
         operator=request.user,
-        notes=f'从销售单 #{sale.id} 中删除商品，恢复库存'
+        notes=f'从销售单 #{sale.id} 删除商品恢复库存'
     )
     
     # 记录操作日志
@@ -727,8 +713,8 @@ def sale_delete_item(request, sale_id, item_id):
     item.delete()
     sale.update_total_amount()
     
-    messages.success(request, '商品已从销售单中删除')
-    return redirect('sale_item_create', sale_id=sale.id)
+    messages.success(request, '已退货并恢复库存')
+    return redirect('sale_detail', sale_id=sale.id)
 
 @login_required
 def member_purchases(request):

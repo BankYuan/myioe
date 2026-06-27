@@ -1,7 +1,7 @@
 # 从各表单模块导入
 from .product_forms import (
-    ProductForm, CategoryForm, ProductBatchForm, 
-    ProductImageFormSet, ProductBulkForm, ProductImportForm
+    ProductForm, CategoryForm, ProductBatchForm,
+    ProductImageFormSet, ProductImportForm
 )
 from .inventory_check_forms import InventoryCheckForm, InventoryCheckItemForm, InventoryCheckApproveForm
 from .member_forms import MemberForm, MemberLevelForm, RechargeForm, MemberImportForm
@@ -11,15 +11,7 @@ from .report_forms import (
     DateRangeForm, TopProductsForm, InventoryTurnoverForm,
     ReportFilterForm, SalesReportForm
 )
-from .system_forms import SystemConfigForm, StoreForm
-
-# 设置StoreForm的model
-from django.apps import apps
-try:
-    Store = apps.get_model('inventory', 'Store')
-    StoreForm._meta.model = Store
-except:
-    pass
+from .system_forms import SystemConfigForm
 
 # 在完全重构完成之前，继续从原始表单文件导入
 from inventory.forms_batch import (
@@ -30,7 +22,7 @@ from inventory.forms_batch import (
 __all__ = [
     # 产品表单
     'ProductForm', 'CategoryForm', 'ProductBatchForm',
-    'ProductImageFormSet', 'ProductBulkForm', 'ProductImportForm',
+    'ProductImageFormSet', 'ProductImportForm',
     
     # 库存盘点表单
     'InventoryCheckForm', 'InventoryCheckItemForm', 'InventoryCheckApproveForm',
@@ -49,7 +41,7 @@ __all__ = [
     'ReportFilterForm', 'SalesReportForm',
     
     # 系统配置表单
-    'SystemConfigForm', 'StoreForm',
+    'SystemConfigForm',
     
     # 批量操作表单
     'BatchProductImportForm', 'BatchInventoryUpdateForm', 'ProductBatchDeleteForm',

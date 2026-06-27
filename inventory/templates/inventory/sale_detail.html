@@ -185,9 +185,6 @@
                                         <div>
                                             <h6 class="mb-0">{{ item.product.name }}</h6>
                                             <small class="text-muted">{{ item.product.barcode }}</small>
-                                            {% if item.product.specification %}
-                                            <br><small class="text-muted">规格: {{ item.product.specification }}</small>
-                                            {% endif %}
                                         </div>
                                     </div>
                                 </td>
@@ -200,7 +197,13 @@
                                     {% endif %}
                                 </td>
                                 <td>{{ item.quantity }}</td>
-                                <td class="fw-bold">¥{{ item.subtotal|floatformat:2 }}</td>
+                                <td class="fw-bold">¥{{ item.subtotal|floatformat:2 }}
+                                    {% if sale.status == 'COMPLETED' %}
+                                    <a href="{% url 'sale_item_delete' sale.id item.id %}" class="btn btn-sm btn-outline-warning ms-2" onclick="return confirm('确认顾客退货该商品?库存将回库,退款请线下处理。')">
+                                        <i class="bi bi-arrow-counterclockwise"></i> 退货
+                                    </a>
+                                    {% endif %}
+                                </td>
                             </tr>
                             {% empty %}
                             <tr>

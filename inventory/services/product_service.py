@@ -26,7 +26,7 @@ def import_products_from_csv(csv_file, user):
     headers = next(csv_data)  # 获取表头
     
     # 验证必要的表头
-    required_headers = ['name', 'retail_price']
+    required_headers = ['name', 'price']
     missing_headers = [h for h in required_headers if h not in headers]
     if missing_headers:
         raise ValueError(f"CSV文件缺少必要的表头: {', '.join(missing_headers)}")
@@ -34,15 +34,17 @@ def import_products_from_csv(csv_file, user):
     # 获取各列索引
     headers_lower = [h.lower() for h in headers]
     name_idx = headers_lower.index('name')
-    retail_price_idx = headers_lower.index('retail_price')
-    
+    price_idx = headers_lower.index('price')
+
     # 可选列的索引
     category_idx = headers_lower.index('category') if 'category' in headers_lower else -1
-    wholesale_price_idx = headers_lower.index('wholesale_price') if 'wholesale_price' in headers_lower else -1
-    cost_price_idx = headers_lower.index('cost_price') if 'cost_price' in headers_lower else -1
+    cost_idx = headers_lower.index('cost') if 'cost' in headers_lower else -1
     barcode_idx = headers_lower.index('barcode') if 'barcode' in headers_lower else -1
-    sku_idx = headers_lower.index('sku') if 'sku' in headers_lower else -1
+    model_no_idx = headers_lower.index('model_no') if 'model_no' in headers_lower else -1
+    color_idx = headers_lower.index('color') if 'color' in headers_lower else -1
+    size_idx = headers_lower.index('size') if 'size' in headers_lower else -1
     specification_idx = headers_lower.index('specification') if 'specification' in headers_lower else -1
+    manufacturer_idx = headers_lower.index('manufacturer') if 'manufacturer' in headers_lower else -1
     
     # 处理每一行数据
     for row_num, row in enumerate(csv_data, start=2):  # 从2开始，因为1是表头
@@ -60,14 +62,14 @@ def import_products_from_csv(csv_file, user):
             
             # 解析价格
             try:
-                retail_price = float(row[retail_price_idx].replace(',', ''))
-                if retail_price < 0:
+                price = float(row[price_idx].replace(',', ''))
+                if price < 0:
                     result['failed'] += 1
-                    result['failed_rows'].append((row_num, "零售价不能为负数"))
+                    result['failed_rows'].append((row_num, "售价不能为负数"))
                     continue
             except (ValueError, IndexError):
                 result['failed'] += 1
-                result['failed_rows'].append((row_num, "零售价格式不正确"))
+                result['failed_rows'].append((row_num, "售价格式不正确"))
                 continue
             
             # 检查商品是否已存在
@@ -91,18 +93,21 @@ def import_products_from_csv(csv_file, user):
                 product = Product.objects.create(
                     name=name,
                     category=category,
-                    price=retail_price,
-                    cost=float(row[cost_price_idx]) if cost_price_idx >= 0 and row[cost_price_idx] else retail_price * 0.7,
+                    price=price,
+                    cost=float(row[cost_idx]) if cost_idx >= 0 and row[cost_idx] else price * 0.7,
                     barcode=row[barcode_idx].strip() if barcode_idx >= 0 and row[barcode_idx] else None,
+                    model_no=row[model_no_idx].strip() if model_no_idx >= 0 and row[model_no_idx] else "",
+                    color=row[color_idx].strip() if color_idx >= 0 and row[color_idx] else "",
+                    size=row[size_idx].strip() if size_idx >= 0 and row[size_idx] else "",
                     specification=row[specification_idx].strip() if specification_idx >= 0 and row[specification_idx] else "",
-                    created_by=user
+                    manufacturer=row[manufacturer_idx].strip() if manufacturer_idx >= 0 and row[manufacturer_idx] else "",
                 )
                 
                 # 创建初始库存记录
                 Inventory.objects.create(
                     product=product,
                     quantity=0,
-                    warning_level=5
+                    warning_level=1
                 )
                 
                 result['success'] += 1
@@ -120,9 +125,9 @@ def search_products(query, category_id=None, active_only=True):
     
     if query:
         products = products.filter(
-            Q(name__icontains=query) | 
+            Q(name__icontains=query) |
             Q(barcode__icontains=query) |
-            Q(sku__icontains=query) |
+            Q(model_no__icontains=query) |
             Q(specification__icontains=query)
         )
     

@@ -15,17 +15,15 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.static import serve
 from django.contrib.auth import views as auth_views
 
 # 导入视图
-from . import views
-from . import views_barcode
 from . import views_category
 from . import views_inventory_check
-from . import views_system
 from . import views_report
 
 # 导入重构后的视图模块
@@ -36,6 +34,8 @@ from .views import sales as sales_views
 from .views import product as product_views
 from .views import inventory as inventory_views
 from .views import system as system_views  # 导入重构后的系统视图模块
+from .views import api_external as api_ext_views
+from .views import supplier as supplier_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -43,24 +43,35 @@ urlpatterns = [
     path('products/', product_views.product_list, name='product_list'),
     path('inventory/', inventory_views.inventory_list, name='inventory_list'),
     path('sales/', sales_views.sale_list, name='sale_list'),
-    path('products/create/', product_views.product_create, name='product_create'),
     path('products/<int:pk>/edit/', product_views.product_update, name='product_edit'),
     path('products/<int:pk>/', product_views.product_detail, name='product_detail'),
     path('products/<int:pk>/delete/', product_views.product_delete, name='product_delete'),
-    
+    path('products/import/', product_views.product_import, name='product_import'),
+    path('products/batch-supplier/', product_views.batch_update_supplier, name='batch_update_supplier'),
+    path('products/export/', product_views.product_export, name='product_export'),
+    path('products/print-barcodes/', product_views.barcode_print, name='barcode_print'),
+
+    # 对外只读 API(供内容平台拉取鞋款数据)
+    path('api/external/shoe-models/', api_ext_views.api_shoe_models, name='api_shoe_models'),
+    path('api/external/shoe-models/<str:model_no>/', api_ext_views.api_shoe_model_detail, name='api_shoe_model_detail'),
+
     # 使用新的条码视图
-    path('products/barcode/', views_barcode.barcode_product_create, name='barcode_product_create'),
     path('api/barcode/lookup/', barcode_views.barcode_lookup, name='barcode_lookup'),
     path('api/barcode/scan/', barcode_views.barcode_scan, name='barcode_scan'),
     path('api/product/barcode/<str:barcode>/', barcode_views.product_by_barcode, name='product_by_barcode'),
     path('api/product/search/barcode/<str:barcode>/', barcode_views.product_by_barcode, name='product_search_by_barcode'),
     path('api/product/search/', barcode_views.product_search_api, name='product_search_api'),
     
-    path('inventory/create/', inventory_views.inventory_transaction_create, name='inventory_create'),
     path('inventory/in/', inventory_views.inventory_in, name='inventory_in'),
     path('inventory/out/', inventory_views.inventory_out, name='inventory_out'),
     path('inventory/adjust/', inventory_views.inventory_adjust, name='inventory_adjust'),
     path('inventory/transactions/', inventory_views.inventory_transaction_list, name='inventory_transaction_list'),
+    path('inventory/scan-in/', inventory_views.inventory_scan_in, name='inventory_scan_in'),
+    path('inventory/scan-out/', inventory_views.inventory_scan_out, name='inventory_scan_out'),
+    path('api/scan/quick-create/', inventory_views.scan_quick_create, name='scan_quick_create'),
+    path('inventory/receipt-recognize/', inventory_views.receipt_recognize, name='receipt_recognize'),
+    path('inventory/batch-purchase/', inventory_views.batch_purchase_create, name='batch_purchase_create'),
+    path('finance/cash-flow/', inventory_views.cash_flow, name='cash_flow'),
     path('sales/create/', sales_views.sale_create, name='sale_create'),
     path('sales/<int:sale_id>/items/create/', sales_views.sale_item_create, name='sale_item_create'),
     path('accounts/login/', auth_views.LoginView.as_view(template_name='registration/login.html'), name='login'),
@@ -93,6 +104,12 @@ urlpatterns = [
     path('categories/create/', views_category.category_create, name='category_create'),
     path('categories/<int:category_id>/edit/', views_category.category_edit, name='category_edit'),
     path('categories/<int:category_id>/delete/', views_category.category_delete, name='category_delete'),
+
+    # 供应商管理URL
+    path('suppliers/', supplier_views.supplier_list, name='supplier_list'),
+    path('suppliers/create/', supplier_views.supplier_create, name='supplier_create'),
+    path('suppliers/<int:pk>/edit/', supplier_views.supplier_update, name='supplier_edit'),
+    path('suppliers/<int:pk>/delete/', supplier_views.supplier_delete, name='supplier_delete'),
     
     # 库存盘点URL
     path('inventory-checks/', views_inventory_check.inventory_check_list, name='inventory_check_list'),
@@ -147,5 +164,9 @@ urlpatterns = [
     path('system/users/<int:pk>/delete/', system_views.user_delete, name='user_delete'),
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# 媒体文件(商品图片)需在生产也可达,供对外 API 拉取。
+# 不能用 django.conf.urls.static.static()——它内部在 DEBUG=False 时返回空列表;
+# 这里直接用 serve 视图手动挂载,绕过该限制。
+urlpatterns += [
+    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
+]

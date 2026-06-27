@@ -30,13 +30,6 @@ from .product import (
     product_update,
     product_detail,
     product_delete,
-    product_category_list,
-    product_category_create,
-    product_category_update,
-    product_category_delete,
-    product_batch_create,
-    product_batch_update,
-    product_bulk_create,
     product_import,
     product_export
 )
@@ -45,15 +38,9 @@ from .product import (
 from .barcode import (
     barcode_lookup,
     barcode_scan,
-    barcode_product_create,
     product_by_barcode,
     scan_barcode,
     get_product_batches,
-    # 以下是已停用的功能但API仍兼容
-    generate_barcode_view,
-    batch_barcode_view,
-    bulk_barcode_generation,
-    barcode_template
 )
 
 # 导入核心视图
@@ -72,24 +59,9 @@ from .inventory import (
     inventory_transaction_create,
 )
 
-# 导入报表相关视图
-from .report import (
-    sales_report,
-    inventory_report,
-    member_report,
-    product_performance_report,
-    daily_summary_report,
-    custom_report,
-    profit_analysis,
-    inventory_batch_report
-)
-
 # 导入系统相关视图
 from .system import (
     system_settings,
-    store_settings,
-    store_list,
-    delete_store,
     system_info,
     system_maintenance,
 )

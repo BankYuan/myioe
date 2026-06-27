@@ -24,10 +24,12 @@ wheels/
 .cursor/
 # 日志文件
 *.log
+logs/
 
 # 本地数据库文件
 db.sqlite3
 db.sqlite3-journal
+db/
 
 # 媒体文件和上传内容
 media/

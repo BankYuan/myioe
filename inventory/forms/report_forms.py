@@ -2,7 +2,7 @@ from django import forms
 from django.utils import timezone
 from datetime import timedelta, datetime, date
 
-from inventory.models import Category, Store
+from inventory.models import Category
 
 
 class DateRangeForm(forms.Form):
@@ -361,25 +361,9 @@ class ReportFilterForm(DateRangeForm):
             'style': 'height: 48px; font-size: 16px;'  # 增大触摸区域和字体
         })
     )
-    
-    store = forms.ModelChoiceField(
-        queryset=Store.objects.filter(is_active=True),  # 恢复is_active过滤，只显示活跃的门店
-        required=False,
-        empty_label="所有门店",
-        widget=forms.Select(attrs={
-            'class': 'form-control form-select',
-            'aria-label': '门店',
-            'data-bs-toggle': 'tooltip',
-            'title': '按门店筛选报表数据',
-            'style': 'height: 48px; font-size: 16px;'  # 增大触摸区域和字体
-        })
-    )
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # 处理门店为空的情况
-        if Store.objects.count() == 0:
-            self.fields.pop('store', None)
 
 
 class SalesReportForm(ReportFilterForm):

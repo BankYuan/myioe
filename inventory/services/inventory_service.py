@@ -45,17 +45,21 @@ class InventoryService:
     @transaction.atomic
     def update_stock(product, quantity, transaction_type, operator, notes=""):
         """
-        Update stock level for a product.
-        
+        Update stock level for a product(旧版,仅库存盘点审核用)。
+
+        ⚠️ ADJUST 语义=【把库存设为 quantity 的绝对值】(盘点实盘数)。
+        新流程(入库/出库/销售/批量进货)请用 inventory.models.update_inventory,
+        其 ADJUST=增量加减。两套勿混用——盘点若误传 update_inventory 会库存翻倍。
+
         Args:
             product: The product to update
-            quantity: The quantity to add (positive) or remove (negative)
-            transaction_type: The type of transaction ('IN', 'OUT', 'ADJUST')
-            operator: The user performing the operation
-            notes: Notes about the transaction
-            
+            quantity: IN/OUT 为增量(+加/-减);ADJUST 为目标绝对值
+            transaction_type: 'IN' / 'OUT' / 'ADJUST'
+            operator: 操作员
+            notes: 备注
+
         Returns:
-            tuple: (inventory, transaction) - The updated inventory and the transaction record
+            tuple: (inventory, transaction)
         """
         # Validate inputs
         if not isinstance(operator, User):
@@ -67,7 +71,7 @@ class InventoryService:
         # Get or create inventory
         inventory, created = Inventory.objects.get_or_create(
             product=product,
-            defaults={'quantity': 0, 'warning_level': 10}
+            defaults={'quantity': 0, 'warning_level': 1}
         )
         
         # For outgoing transactions, check stock

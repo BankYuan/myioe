@@ -75,9 +75,9 @@
             margin-bottom: 1.5rem;
         }
         
+        /* 数据后台用沉稳的微阴影反馈,不上下跳动 */
         .card:hover {
-            transform: translateY(-5px);
-            box-shadow: var(--box-shadow);
+            box-shadow: 0 0.4rem 1rem rgba(0, 0, 0, 0.12);
         }
         
         .card-header {
@@ -123,9 +123,17 @@
         /* 表单样式优化 */
         .form-control, .form-select {
             border-radius: 0.5rem;
-            padding: 0.5rem 0.75rem;
             border: 1px solid #ced4da;
             transition: all var(--transition-speed) ease;
+        }
+
+        .form-control {
+            padding: 0.5rem 0.75rem;
+        }
+
+        /* form-select 右侧留位给下拉箭头,避免箭头压住文字 */
+        .form-select {
+            padding: 0.5rem 2.25rem 0.5rem 0.75rem;
         }
         
         .form-control:focus, .form-select:focus {
@@ -567,6 +575,104 @@
                 align-items: center;
             }
         }
+
+        /* ===== 简洁大方风格组件(商品管理等表单页) ===== */
+
+        /* 必填项红星(crispy forms 的 asteriskField) */
+        .asteriskField,
+        .required-asterisk {
+            color: var(--accent-color);
+            margin-left: 2px;
+            font-weight: 700;
+        }
+
+        /* 页面头:标题 + 操作按钮,不再用整块蓝卡 */
+        .page-head {
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #e9ecef;
+            margin-bottom: 1.5rem;
+        }
+        .page-head .page-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--primary-color);
+            margin-bottom: 0.25rem;
+        }
+        .page-head .page-sub {
+            font-size: 0.875rem;
+            color: #6c757d;
+        }
+
+        /* 表单分区:左边竖线 + 标题,去掉卡片套卡片的臃肿 */
+        .form-section {
+            margin-bottom: 2rem;
+        }
+        .form-section-title {
+            font-weight: 600;
+            font-size: 1rem;
+            color: var(--primary-color);
+            border-left: 3px solid var(--secondary-color);
+            padding-left: 0.65rem;
+            margin-bottom: 1.1rem;
+            line-height: 1.2;
+        }
+        .form-section-title small {
+            font-weight: 400;
+            color: #9aa5b1;
+            font-size: 0.8rem;
+            margin-left: 0.4rem;
+        }
+
+        /* 统一底部操作条 */
+        .form-actions-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            padding-top: 1.25rem;
+            margin-top: 0.5rem;
+            border-top: 1px solid #e9ecef;
+        }
+
+        /* 表单字段更透气 */
+        .form-section .form-group,
+        .form-section .mb-3 {
+            margin-bottom: 1rem;
+        }
+
+        /* 图片缩略网格:已传图,更整齐 */
+        .img-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 0.75rem;
+        }
+        .img-grid .img-cell {
+            border: 1px solid #e9ecef;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            background: #fff;
+            text-align: center;
+        }
+        .img-grid .img-cell img {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            display: block;
+        }
+        .img-grid .img-cell .img-meta {
+            padding: 0.4rem 0.5rem;
+            font-size: 0.8rem;
+        }
+
+        @media (max-width: 768px) {
+            .form-actions-bar {
+                justify-content: stretch;
+            }
+            .form-actions-bar .btn {
+                flex: 1;
+            }
+        }
     </style>
 </head>
 <body>
@@ -580,15 +686,15 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/product/' %}active{% endif %}" href="{% url 'product_list' %}">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if '/products/' in request.path or '/categories/' in request.path or '/suppliers/' in request.path %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-box me-1"></i>商品管理
                         </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if '/categories/' in request.path %}active{% endif %}" href="{% url 'category_list' %}">
-                            <i class="bi bi-tag"></i> 分类管理
-                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{% url 'product_list' %}"><i class="bi bi-box-seam me-2"></i>商品列表</a></li>
+                            <li><a class="dropdown-item" href="{% url 'category_list' %}"><i class="bi bi-tag me-2"></i>分类管理</a></li>
+                            <li><a class="dropdown-item" href="{% url 'supplier_list' %}"><i class="bi bi-truck me-2"></i>供应商管理</a></li>
+                        </ul>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if request.path == '/inventory/' %}active{% endif %}" href="{% url 'inventory_list' %}">
@@ -603,6 +709,11 @@
                     <li class="nav-item">
                         <a class="nav-link {% if '/sales/' in request.path %}active{% endif %}" href="{% url 'sale_list' %}">
                             <i class="bi bi-cart me-1"></i>销售管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if '/finance/' in request.path %}active{% endif %}" href="{% url 'cash_flow' %}">
+                            <i class="bi bi-wallet2 me-1"></i>资金流水
                         </a>
                     </li>
                     <li class="nav-item dropdown">
@@ -662,12 +773,6 @@
         </div>
     </div>
 
-    <footer class="bg-light py-3 mt-auto border-top">
-        <div class="container text-center text-muted">
-            <small>&copy; 2025 库存管理系统 | 版本 1.0</small>
-        </div>
-    </footer>
-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.32/dist/sweetalert2.all.min.js"></script>
     {% block extra_js %}{% endblock %}
@@ -685,9 +790,9 @@
              }
          });
          
-         // 自动隐藏警告消息
+         // 自动隐藏「可关闭的」消息(messages 带 alert-dismissible);静态说明用的 .alert 不受影响
          setTimeout(function() {
-             document.querySelectorAll('.alert').forEach(function(alert) {
+             document.querySelectorAll('.alert-dismissible').forEach(function(alert) {
                 if (typeof bootstrap !== 'undefined' && bootstrap.Alert) {
                  const bsAlert = new bootstrap.Alert(alert);
                  bsAlert.close();

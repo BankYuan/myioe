@@ -126,7 +126,7 @@ def barcode_lookup(request):
         
     # 首先检查数据库中是否已存在该条码的商品
     try:
-        product = inventory.models.Product.objects.get(barcode=barcode)
+        product = inventory.models.Product.objects.get(Q(barcode=barcode) | Q(scan_code=barcode))
         # 获取库存信息
         try:
             inventory = inventory.models.Inventory.objects.get(product=product)
@@ -170,87 +170,47 @@ def barcode_scan(request):
     """条码扫描页面，用于测试条码功能"""
     return render(request, 'inventory/barcode/barcode_scan.html')
 
-def product_by_barcode(request, barcode):
-    """根据条码查询商品信息的API"""
+def _product_info(product):
+    """构造商品信息字典(含款号/色码/库存/图片),供商品查找返回统一使用。"""
     try:
-        # 先尝试精确匹配条码
-        product = inventory.models.Product.objects.get(barcode=barcode)
-        # 获取库存信息
-        try:
-            inventory_obj = inventory.models.Inventory.objects.get(product=product)
-            stock = inventory_obj.quantity
-        except inventory.models.Inventory.DoesNotExist:
-            stock = 0
-            
-        return JsonResponse({
-            'success': True,
-            'multiple_matches': False,
-            'product_id': product.id,
-            'name': product.name,
-            'price': float(product.price),
-            'stock': stock,
-            'category': product.category.name if product.category else '',
-            'specification': product.specification,
-            'manufacturer': product.manufacturer
-        })
-    except inventory.models.Product.DoesNotExist:
-        # 如果精确匹配失败，尝试模糊匹配条码或名称
-        products = inventory.models.Product.objects.filter(
-            Q(barcode__icontains=barcode) | 
-            Q(name__icontains=barcode)
-        ).order_by('name')[:5]  # 限制返回数量
-        
-        if products.exists():
-            # 如果只有一个匹配结果
-            if products.count() == 1:
-                product = products.first()
-                # 获取库存信息
-                try:
-                    inventory_obj = inventory.models.Inventory.objects.get(product=product)
-                    stock = inventory_obj.quantity
-                except inventory.models.Inventory.DoesNotExist:
-                    stock = 0
-                    
-                return JsonResponse({
-                    'success': True,
-                    'multiple_matches': False,
-                    'product_id': product.id,
-                    'name': product.name,
-                    'price': float(product.price),
-                    'stock': stock,
-                    'category': product.category.name if product.category else '',
-                    'specification': product.specification,
-                    'manufacturer': product.manufacturer
-                })
-            # 如果有多个匹配结果
-            else:
-                product_list = []
-                for product in products:
-                    try:
-                        inventory_obj = inventory.models.Inventory.objects.get(product=product)
-                        stock = inventory_obj.quantity
-                    except inventory.models.Inventory.DoesNotExist:
-                        stock = 0
-                        
-                    product_list.append({
-                        'product_id': product.id,
-                        'name': product.name,
-                        'price': float(product.price),
-                        'barcode': product.barcode,
-                        'stock': stock,
-                        'category': product.category.name if product.category else ''
-                    })
-                    
-                return JsonResponse({
-                    'success': True,
-                    'multiple_matches': True,
-                    'products': product_list
-                })
-        else:
-            return JsonResponse({
-                'success': False,
-                'message': '未找到商品'
-            })
+        stock = inventory.models.Inventory.objects.get(product=product).quantity
+    except inventory.models.Inventory.DoesNotExist:
+        stock = 0
+    return {
+        'product_id': product.id,
+        'name': product.name,
+        'barcode': product.barcode,
+        'scan_code': product.scan_code,
+        'model_no': product.model_no or '',
+        'price': float(product.price),
+        'stock': stock,
+        'color': product.color or '',
+        'size': product.size or '',
+        'category': product.category.name if product.category else '',
+        'specification': product.specification or '',
+        'image': product.image.url if product.image else '',
+    }
+
+
+def product_by_barcode(request, barcode):
+    """根据 条码 / 款号 / 名称 查询商品。精确条码命中→单结果;否则模糊(条码/款号/名称)→单或多结果。"""
+    Product = inventory.models.Product
+    # 1. 精确条码:商品条码(barcode)或 扫码码(scan_code,贴纸条码)
+    product = Product.objects.filter(Q(barcode=barcode) | Q(scan_code=barcode)).first()
+    if product:
+        return JsonResponse({'success': True, 'multiple_matches': False, **_product_info(product)})
+    # 2. 模糊:条码 / 款号 / 名称
+    products = Product.objects.filter(
+        Q(barcode__icontains=barcode) | Q(model_no__icontains=barcode) | Q(name__icontains=barcode)
+    ).order_by('name')[:10]
+    if not products.exists():
+        return JsonResponse({'success': False, 'message': '未找到商品'})
+    if products.count() == 1:
+        return JsonResponse({'success': True, 'multiple_matches': False, **_product_info(products.first())})
+    return JsonResponse({
+        'success': True, 'multiple_matches': True,
+        'products': [_product_info(p) for p in products],
+    })
 
 @login_required
 def scan_barcode(request):
@@ -341,32 +301,6 @@ def get_product_batches(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
-# 以下为已停用的条码生成和打印功能
-# 保留函数定义以维持API兼容性，但返回功能停用提示
-
-@login_required
-def generate_barcode_view(request, product_id=None):
-    """生成商品条码视图 - 功能已停用"""
-    messages.info(request, "条码生成功能已停用，因为您的商品已有条码。")
-    return redirect('product_list')  # 重定向到商品列表页面
-
-@login_required
-def batch_barcode_view(request, batch_id=None):
-    """生成批次条码视图 - 功能已停用"""
-    messages.info(request, "批次条码生成功能已停用，因为您的商品已有条码。")
-    return redirect('product_list')  # 重定向到商品列表页面
-
-@login_required
-def bulk_barcode_generation(request):
-    """批量生成条码视图 - 功能已停用"""
-    messages.info(request, "批量条码生成功能已停用，因为您的商品已有条码。")
-    return redirect('product_list')  # 重定向到商品列表页面
-
-@login_required
-def barcode_template(request):
-    """条码模板设置视图 - 功能已停用"""
-    messages.info(request, "条码模板设置功能已停用，因为您的商品已有条码。")
-    return redirect('product_list')  # 重定向到商品列表页面
 
 def product_search_api(request):
     """通过名称或其他字段搜索商品API"""
@@ -395,6 +329,10 @@ def product_search_api(request):
             'price': float(product.price),
             'stock': stock,
             'barcode': product.barcode,
+            'model_no': product.model_no or '',
+            'color': product.color or '',
+            'size': product.size or '',
+            'image': product.image.url if product.image else '',
             'spec': product.specification,
             'category': product.category.name if product.category else ''
         })

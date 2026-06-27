@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'crispy_forms',
     'crispy_bootstrap5',
     'widget_tweaks',
+    'storages',
 ]
 
 MIDDLEWARE = [
@@ -79,8 +80,12 @@ WSGI_APPLICATION = 'inventory.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db' / 'db.sqlite3',
+        'ENGINE': os.environ.get('DB_ENGINE', 'django.db.backends.sqlite3'),
+        'NAME': os.environ.get('DB_NAME', str(BASE_DIR / 'db' / 'db.sqlite3')),
+        'USER': os.environ.get('DB_USER', ''),
+        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+        'HOST': os.environ.get('DB_HOST', ''),
+        'PORT': os.environ.get('DB_PORT', ''),
     }
 }
 
@@ -119,8 +124,36 @@ STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 
-MEDIA_URL = 'media/'
+MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# 文件存储:媒体文件存 MinIO(S3 兼容),静态文件保持本地
+STORAGES = {
+    "default": {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            "endpoint_url": os.environ.get("MINIO_ENDPOINT", "http://minio:9000"),
+            "access_key": os.environ.get("MINIO_ROOT_USER", "minioadmin"),
+            "secret_key": os.environ.get("MINIO_ROOT_PASSWORD", "minioadmin"),
+            "bucket_name": os.environ.get("MINIO_BUCKET", "ioe-media"),
+            "region_name": "us-east-1",
+            "file_overwrite": False,
+            "location": "media",
+            "custom_domain": os.environ.get("MINIO_PUBLIC_DOMAIN", "localhost:9002/ioe-media"),
+            "url_protocol": "http:",
+        },
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
+
+# 对外只读 API 的访问密钥(供内容平台拉取鞋款数据);为空则 API 返回 503
+XHS_API_KEY = os.environ.get('XHS_API_KEY', '')
+
+# Dify(进货单截图 AI 识别);为空则识别功能提示未配置
+DIFY_BASE_URL = os.environ.get('DIFY_BASE_URL', '')
+DIFY_RECEIPT_API_KEY = os.environ.get('DIFY_RECEIPT_API_KEY', '')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

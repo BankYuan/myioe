@@ -1,0 +1,81 @@
+{% extends 'inventory/base.html' %}
+{% load static %}
+
+{% block title %}打印条码贴纸{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 no-print">
+    <h5 class="mb-0">条码贴纸打印 <small class="text-muted">共 {{ products|length }} 个色码</small></h5>
+    <div class="d-flex gap-2 align-items-center">
+        <label class="small text-muted mb-0">每张份数</label>
+        <input type="number" id="copies" value="1" min="1" max="20" class="form-control form-control-sm" style="width:70px">
+        <button class="btn btn-primary btn-sm" onclick="window.print()"><i class="bi bi-printer me-1"></i>打印</button>
+        <a href="{% url 'product_list' %}" class="btn btn-outline-secondary btn-sm">返回</a>
+    </div>
+</div>
+
+<div id="labels" class="labels-grid">
+    {% for p in products %}
+    <div class="label-card" data-scan="{{ p.scan_code }}">
+        <svg class="bc"></svg>
+        <div class="bc-text">{{ p.scan_code }}</div>
+        <div class="prod-name">{{ p.name }}</div>
+        <div class="prod-info">{{ p.model_no|default:'' }}{% if p.color %} · {{ p.color }}{% endif %}{% if p.size %} · {{ p.size }}码{% endif %}</div>
+    </div>
+    {% empty %}
+    <div class="text-muted p-4">没有可打印的商品</div>
+    {% endfor %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+<script>
+function renderLabels() {
+    document.querySelectorAll('.label-card').forEach(function(card) {
+        var scan = card.dataset.scan;
+        if (scan) {
+            try {
+                JsBarcode(card.querySelector('.bc'), scan, {
+                    format: 'EAN13', width: 2, height: 40, fontSize: 14, displayValue: false, margin: 2
+                });
+            } catch (e) { card.querySelector('.bc').textContent = '无效EAN13'; }
+        }
+    });
+}
+renderLabels();
+// 每张打印 N 份
+document.getElementById('copies').addEventListener('input', function() {
+    var n = parseInt(this.value) || 1;
+    var grid = document.getElementById('labels');
+    var originals = grid.querySelectorAll('.label-card[data-original]');
+    if (!originals.length) {
+        document.querySelectorAll('.label-card').forEach(function(c){ c.setAttribute('data-original','1'); });
+        originals = grid.querySelectorAll('.label-card[data-original]');
+    }
+    grid.innerHTML = '';
+    originals.forEach(function(card) {
+        for (var i = 0; i < n; i++) {
+            var clone = card.cloneNode(true);
+            clone.removeAttribute('data-original');
+            grid.appendChild(clone);
+        }
+    });
+    renderLabels();
+});
+</script>
+
+<style>
+.labels-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+.label-card { border: 1px dashed #bbb; padding: 4px 6px; width: 200px; text-align: center; page-break-inside: avoid; }
+.label-card svg { width: 100%; height: 50px; }
+.bc-text { font-family: monospace; font-size: 11px; letter-spacing: 1px; }
+.prod-name { font-size: 11px; font-weight: bold; margin-top: 2px; }
+.prod-info { font-size: 10px; color: #555; }
+@media print {
+    .no-print, nav { display: none !important; }
+    body { background: #fff !important; }
+    .container { max-width: 100% !important; padding: 0 !important; }
+    .labels-grid { gap: 2px; }
+    .label-card { border: 1px solid #000; width: 48%; }
+}
+</style>
+{% endblock %}

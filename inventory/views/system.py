@@ -13,8 +13,8 @@ from datetime import datetime, timedelta
 import os
 import logging
 
-from inventory.models import SystemConfig, Store
-from inventory.forms import SystemConfigForm, StoreForm
+from inventory.models import SystemConfig
+from inventory.forms import SystemConfigForm
 from inventory.permissions import system_admin_required
 from inventory.utils.system_utils import get_system_info
 from inventory.models.settings import SystemSettings, BackupSchedule
@@ -47,69 +47,6 @@ def system_settings(request):
 
 @login_required
 @system_admin_required
-def store_settings(request, pk=None):
-    """门店设置视图"""
-    if pk:
-        store = get_object_or_404(Store, pk=pk)
-        if request.method == 'POST':
-            form = StoreForm(request.POST, instance=store)
-            if form.is_valid():
-                form.save()
-                messages.success(request, f"门店 {store.name} 信息已更新")
-                return redirect('store_list')
-        else:
-            form = StoreForm(instance=store)
-        
-        return render(request, 'inventory/system/store_form.html', {
-            'form': form,
-            'store': store,
-            'title': f'编辑门店: {store.name}'
-        })
-    else:
-        if request.method == 'POST':
-            form = StoreForm(request.POST)
-            if form.is_valid():
-                store = form.save()
-                messages.success(request, f"门店 {store.name} 创建成功")
-                return redirect('store_list')
-        else:
-            form = StoreForm()
-        
-        return render(request, 'inventory/system/store_form.html', {
-            'form': form,
-            'title': '新增门店'
-        })
-
-
-@login_required
-@system_admin_required
-def store_list(request):
-    """门店列表视图"""
-    stores = Store.objects.all().order_by('name')
-    return render(request, 'inventory/system/store_list.html', {
-        'stores': stores
-    })
-
-
-@login_required
-@system_admin_required
-def delete_store(request, pk):
-    """删除门店视图"""
-    store = get_object_or_404(Store, pk=pk)
-    
-    if request.method == 'POST':
-        store_name = store.name
-        store.delete()
-        messages.success(request, f"门店 {store_name} 已删除")
-        return redirect('store_list')
-    
-    return render(request, 'inventory/system/store_confirm_delete.html', {
-        'store': store
-    })
-
-
-@login_required
-@system_admin_required
 def system_info(request):
     """系统信息视图"""
     # 收集系统信息
@@ -130,17 +67,10 @@ def system_info(request):
         'staff_users': User.objects.filter(is_staff=True).count(),
         'admin_users': User.objects.filter(is_superuser=True).count(),
     }
-    
-    # 门店统计
-    store_stats = {
-        'total_stores': Store.objects.count(),
-        'active_stores': Store.objects.filter(is_active=True).count(),  # 恢复is_active过滤
-    }
-    
+
     return render(request, 'inventory/system/info.html', {
         'system_info': system_info,
         'user_stats': user_stats,
-        'store_stats': store_stats,
     })
 
 

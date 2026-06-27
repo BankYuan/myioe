@@ -1,7 +1,26 @@
 import re
 from django import forms
 from django.forms import inlineformset_factory
+from django.db.models import F
 from inventory.models import Product, Category, ProductImage, ProductBatch, Supplier
+
+
+def category_choices():
+    """鞋类目选项(只保留 8 个一级),返回 [(pk, name), ...] 平铺列表供下拉选择。
+
+    第一项为空占位;二级类目已废弃,如需细分请用款号/标签。
+    """
+    l1s = Category.objects.filter(code=F('l1_code')).exclude(code='').order_by('id')
+    choices = [('', '--- 请选择分类 ---')]
+    choices += [(l1.pk, l1.name) for l1 in l1s]
+    orphans = Category.objects.filter(code='')
+    if orphans.exists():
+        choices += [(c.pk, f'{c.name}(未分类)') for c in orphans.order_by('id')]
+    return choices
+
+
+# 兼容旧调用名(views/forms 多处仍引用 category_optgroup_choices)
+category_optgroup_choices = category_choices
 
 
 class ProductForm(forms.ModelForm):
@@ -32,24 +51,37 @@ class ProductForm(forms.ModelForm):
             'aria-label': '预警库存'
         })
     )
-    
+
+    # 颜色/尺码自由输入(鞋类颜色尺码多变,不限于预设;和批量录入一致)
+    color = forms.CharField(
+        label='颜色', required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': '可输入或选择', 'aria-label': '颜色', 'list': 'id_color_options'})
+    )
+    size = forms.CharField(
+        label='尺码', required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': '可输入或选择', 'aria-label': '尺码', 'list': 'id_size_options'})
+    )
+
     class Meta:
         model = Product
-        fields = ['barcode', 'name', 'category', 'color', 'size', 'description', 'price', 'cost', 'image', 'specification', 'manufacturer', 'is_active']
+        fields = ['barcode', 'scan_code', 'model_no', 'name', 'category', 'supplier', 'color', 'size', 'price', 'cost', 'image', 'is_active']
         widgets = {
-            'description': forms.Textarea(attrs={'rows': 3, 'class': 'form-control'}),
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '请输入商品名称', 'aria-label': '商品名称'}),
+            'model_no': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '款号(同款共享)', 'aria-label': '款号'}),
+            'scan_code': forms.TextInput(attrs={'class': 'form-control', 'readonly': True, 'aria-label': '扫码码(贴纸条码,EAN-13自动生成)'}),
             'price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': '售价', 'inputmode': 'decimal', 'aria-label': '售价'}),
             'cost': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': '成本价', 'inputmode': 'decimal', 'aria-label': '成本价'}),
-            'specification': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '规格', 'aria-label': '规格'}),
-            'manufacturer': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '制造商', 'aria-label': '制造商'}),
             'category': forms.Select(attrs={'class': 'form-control form-select', 'aria-label': '商品分类'}),
-            'color': forms.Select(attrs={'class': 'form-control form-select', 'aria-label': '颜色'}),
-            'size': forms.Select(attrs={'class': 'form-control form-select', 'aria-label': '尺码'}),
+            'supplier': forms.Select(attrs={'class': 'form-control form-select', 'aria-label': '供应商'}),
             'image': forms.FileInput(attrs={'class': 'form-control', 'accept': 'image/*', 'aria-label': '商品图片'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input', 'aria-label': '是否启用'}),
         }
         
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # 分类下拉按一级鞋类目分组(optgroup),一级与二级类目都可选
+        self.fields['category'].widget.choices = category_optgroup_choices()
+
     def clean_barcode(self):
         barcode = self.cleaned_data.get('barcode')
         if barcode:
@@ -124,7 +156,7 @@ class ProductForm(forms.ModelForm):
 class CategoryForm(forms.ModelForm):
     class Meta:
         model = Category
-        fields = ['name', 'description']
+        fields = ['name', 'code', 'description']
         widgets = {
             'name': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -134,6 +166,12 @@ class CategoryForm(forms.ModelForm):
                 'autocomplete': 'off',  # 防止自动填充
                 'autofocus': True  # 自动获取焦点
             }),
+            'code': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': '类目编码(英文,如 sneakers);填了才进商品下拉',
+                'aria-label': '类目编码',
+                'style': 'height: 48px; font-size: 16px;'
+            }),
             'description': forms.Textarea(attrs={
                 'class': 'form-control',
                 'placeholder': '分类描述',
@@ -142,6 +180,16 @@ class CategoryForm(forms.ModelForm):
                 'style': 'font-size: 16px;'  # 增大字体
             }),
         }
+
+    def save(self, commit=True):
+        category = super().save(commit=False)
+        # 有编码 = 一级类目(l1_code 与 code 一致,才会出现在商品分类下拉里)
+        if category.code:
+            category.code = category.code.strip()
+            category.l1_code = category.code
+        if commit:
+            category.save()
+        return category
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -232,134 +280,34 @@ class ProductBatchForm(forms.ModelForm):
         return cost_price
 
 
+class ProductImageForm(forms.ModelForm):
+    """商品图片表单(供 ProductImageFormSet 用)。新图 image_type 默认主图,避免忘选导致必填校验失败、整组图片不保存。"""
+    class Meta:
+        model = ProductImage
+        fields = ('image', 'image_type', 'alt_text', 'is_primary')
+        widgets = {
+            'image': forms.FileInput(attrs={'class': 'form-control img-input', 'accept': 'image/*', 'aria-label': '图片'}),
+            'image_type': forms.Select(attrs={'class': 'form-control form-select', 'aria-label': '图片类型'}),
+            'alt_text': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '图片描述', 'aria-label': '图片描述'}),
+            'is_primary': forms.CheckboxInput(attrs={'class': 'form-check-input', 'aria-label': '是否主图'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # image/image_type 不强制必填:5 个上传位里没选文件的空行不应让整组校验失败
+        # (image_type 下拉 HTML 默认选第一项「白底主图」;order 已从表单移除,用模型默认 0)
+        self.fields['image'].required = False
+        self.fields['image_type'].required = False
+
+
 # 创建商品图片的内联表单集
 ProductImageFormSet = inlineformset_factory(
-    Product, 
+    Product,
     ProductImage,
-    fields=('image', 'alt_text', 'order', 'is_primary'),
-    extra=3,  # 默认显示3个空表单
-    can_delete=True,  # 允许删除
-    widgets={
-        'image': forms.FileInput(attrs={
-            'class': 'form-control',
-            'accept': 'image/*',
-            'aria-label': '图片'
-        }),
-        'alt_text': forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': '图片描述',
-            'aria-label': '图片描述'
-        }),
-        'order': forms.NumberInput(attrs={
-            'class': 'form-control',
-            'min': '0',
-            'step': '1',
-            'placeholder': '排序',
-            'aria-label': '排序'
-        }),
-        'is_primary': forms.CheckboxInput(attrs={
-            'class': 'form-check-input',
-            'aria-label': '是否主图'
-        }),
-    }
+    form=ProductImageForm,
+    extra=0,  # 不显示空行;新图走批量上传(bulk_images),formset 只管已传图的类型/删除
+    can_delete=True,
 )
-
-
-class ProductBulkForm(forms.Form):
-    """批量创建商品表单"""
-    category = forms.ModelChoiceField(
-        queryset=Category.objects.filter(is_active=True),
-        label='商品分类',
-        required=True,
-        widget=forms.Select(attrs={
-            'class': 'form-control form-select',
-            'aria-label': '商品分类'
-        })
-    )
-    name_prefix = forms.CharField(
-        max_length=100,
-        label='商品名称前缀',
-        required=True,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': '例如：测试商品',
-            'aria-label': '商品名称前缀'
-        })
-    )
-    name_suffix_start = forms.IntegerField(
-        label='编号起始值',
-        initial=1,
-        required=True,
-        widget=forms.NumberInput(attrs={
-            'class': 'form-control',
-            'min': '1',
-            'step': '1',
-            'placeholder': '1',
-            'aria-label': '编号起始值'
-        })
-    )
-    name_suffix_end = forms.IntegerField(
-        label='编号结束值',
-        initial=10,
-        required=True,
-        widget=forms.NumberInput(attrs={
-            'class': 'form-control',
-            'min': '1',
-            'step': '1',
-            'placeholder': '10',
-            'aria-label': '编号结束值'
-        })
-    )
-    retail_price = forms.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        label='零售价',
-        required=True,
-        widget=forms.NumberInput(attrs={
-            'class': 'form-control',
-            'step': '0.01',
-            'placeholder': '零售价',
-            'aria-label': '零售价'
-        })
-    )
-    wholesale_price = forms.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        label='批发价',
-        required=False,
-        widget=forms.NumberInput(attrs={
-            'class': 'form-control',
-            'step': '0.01',
-            'placeholder': '批发价（可选）',
-            'aria-label': '批发价'
-        })
-    )
-    cost_price = forms.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        label='成本价',
-        required=False,
-        widget=forms.NumberInput(attrs={
-            'class': 'form-control',
-            'step': '0.01',
-            'placeholder': '成本价（可选）',
-            'aria-label': '成本价'
-        })
-    )
-
-    def clean(self):
-        cleaned_data = super().clean()
-        suffix_start = cleaned_data.get('name_suffix_start')
-        suffix_end = cleaned_data.get('name_suffix_end')
-        
-        if suffix_start and suffix_end and suffix_start > suffix_end:
-            raise forms.ValidationError('编号起始值不能大于结束值')
-        
-        # 限制批量创建数量不超过100
-        if suffix_start and suffix_end and (suffix_end - suffix_start + 1) > 100:
-            raise forms.ValidationError('批量创建商品数量不能超过100个')
-        
-        return cleaned_data
 
 
 class ProductImportForm(forms.Form):

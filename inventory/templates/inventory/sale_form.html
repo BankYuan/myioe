@@ -375,11 +375,16 @@ document.addEventListener('DOMContentLoaded', function() {
                         console.log(`[API Response] Multiple products found for ${barcode}. Showing selection modal.`);
                         // **确保传递给模态框的数据结构统一**
                         const standardizedProducts = data.products.map(p => ({
-                            id: p.product_id || p.id, // 适配两种可能的 key
+                            id: p.product_id || p.id,
                             name: p.name,
                             price: parseFloat(p.price) || 0,
                             stock: parseInt(p.stock) || 0,
-                            spec: p.specification || p.spec || '' // 适配多种可能的 key
+                            spec: p.specification || p.spec || '',
+                            model_no: p.model_no || '',
+                            color: p.color || '',
+                            size: p.size || '',
+                            image: p.image || '',
+                            barcode: p.barcode || ''
                         }));
                         showProductSelectionModal(standardizedProducts);
                     } else if (data.product_id || (data.product && data.product.id)) {
@@ -391,7 +396,12 @@ document.addEventListener('DOMContentLoaded', function() {
                             name: productSource.name,
                             price: parseFloat(productSource.price) || 0,
                             stock: parseInt(productSource.stock) || 0,
-                            spec: productSource.specification || productSource.spec || ''
+                            spec: productSource.specification || productSource.spec || '',
+                            model_no: productSource.model_no || '',
+                            color: productSource.color || '',
+                            size: productSource.size || '',
+                            image: productSource.image || '',
+                            barcode: productSource.barcode || ''
                         };
                          // **再次校验构建的对象**
                         if (!productData.id || !productData.name) {
@@ -443,7 +453,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         name: p.name,
                         price: parseFloat(p.price) || 0,
                         stock: parseInt(p.stock) || 0,
-                        spec: p.specification || p.spec || ''
+                        spec: p.specification || p.spec || '',
+                        model_no: p.model_no || '',
+                        color: p.color || '',
+                        size: p.size || '',
+                        image: p.image || '',
+                        barcode: p.barcode || ''
                     }));
                     showProductSelectionModal(standardizedProducts);
                 } else {
@@ -557,12 +572,20 @@ document.addEventListener('DOMContentLoaded', function() {
             productItem.className = 'card mb-2';
             // **使用标准化后的 product 对象的属性**
             productItem.innerHTML = `
-                <div class="card-body">
-                    <h5 class="card-title">${product.name}</h5>
-                    <p class="card-text">价格: ¥${product.price.toFixed(2)} | 库存: ${product.stock}</p>
-                    <button class="btn btn-primary select-product-btn">
-                        选择此商品
-                    </button>
+                <div class="card-body d-flex align-items-center gap-3 py-2">
+                    <div class="flex-shrink-0">
+                        ${product.image ? `<img src="${product.image}" class="rounded" width="56" height="56" style="object-fit:cover">` : '<div class="bg-light rounded d-flex align-items-center justify-content-center" style="width:56px;height:56px"><i class="bi bi-box text-secondary fs-4"></i></div>'}
+                    </div>
+                    <div class="flex-grow-1">
+                        <h6 class="mb-1">${product.name}${product.model_no ? ` <small class="text-muted">款号:${product.model_no}</small>` : ''}</h6>
+                        <div class="mb-1">
+                            ${product.color ? `<span class="badge bg-secondary">${product.color}</span>` : ''}
+                            ${product.size ? `<span class="badge bg-dark ms-1">${product.size}</span>` : ''}
+                            ${product.barcode ? `<span class="text-muted small ms-2">${product.barcode}</span>` : ''}
+                        </div>
+                        <div class="small">价格: <strong>¥${product.price.toFixed(2)}</strong> <span class="text-muted ms-2">库存:</span> <strong class="${product.stock <= 0 ? 'text-danger' : 'text-success'}">${product.stock}</strong></div>
+                    </div>
+                    <button class="btn btn-primary btn-sm select-product-btn flex-shrink-0">选择</button>
                 </div>
             `;
             // **将标准化数据直接附加到按钮上**
@@ -706,6 +729,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // **构建 row HTML**
         const rowHTML = `
             <td>${product.name}
+                ${product.color ? `<span class="badge bg-secondary ms-1">${product.color}</span>` : ''}
+                ${product.size ? `<span class="badge bg-dark ms-1">${product.size}</span>` : ''}
                 <input type="hidden" class="product-id-input" name="temp_product_id" value="${product.id}">
                 <span class="d-none product-id-display">${product.id}</span>
             </td>
@@ -717,7 +742,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </td>
             <td>¥<input type="number" step="0.01" class="form-control form-control-sm price-input" value="${price.toFixed(2)}" style="width: 90px;"></td>
-            <td>${product.spec || '无规格'}</td>
             <td class="text-end subtotal">¥${price.toFixed(2)}</td>
             <td class="text-center">
                 <button type="button" class="btn btn-outline-danger btn-sm delete-btn">
@@ -1201,7 +1225,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <!-- 商品搜索区域 -->
             <div class="product-search-area p-3 border-bottom">
                 <div class="input-group">
-                    <input type="text" id="product-search-input" class="form-control" placeholder="扫描商品条码或输入商品名称">
+                    <input type="text" id="product-search-input" class="form-control" placeholder="扫码 / 输入款号或商品名(如 882-132)">
                     <button type="button" class="btn btn-primary" onclick="searchProductByBarcode(document.getElementById('product-search-input').value)">
                         <i class="bi bi-search"></i> 查找
                         </button>
@@ -1217,7 +1241,6 @@ document.addEventListener('DOMContentLoaded', function() {
                             <th width="30%">商品名称</th>
                             <th width="20%">数量</th>
                             <th width="15%">单价</th>
-                            <th width="15%">规格</th>
                             <th width="15%">小计</th>
                             <th width="5%">操作</th>
                         </tr>

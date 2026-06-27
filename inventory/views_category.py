@@ -9,9 +9,19 @@ from inventory.forms import CategoryForm
 
 @login_required
 def category_list(request):
-    """商品分类列表视图"""
-    categories = Category.objects.all().order_by('name')
-    return render(request, 'inventory/category_list.html', {'categories': categories})
+    """商品分类列表视图(只保留一级鞋类目)"""
+    from django.db.models import Count, F
+    categories = (
+        Category.objects.filter(code=F('l1_code')).exclude(code='')
+        .annotate(prod_count=Count('product')).order_by('id')
+    )
+    orphans = (
+        Category.objects.filter(code='').annotate(prod_count=Count('product')).order_by('id')
+    )
+    return render(request, 'inventory/category_list.html', {
+        'categories': categories,
+        'orphans': orphans,
+    })
 
 @login_required
 def category_create(request):

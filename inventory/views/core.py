@@ -4,7 +4,7 @@
 """
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
-from django.db.models import Sum, Count, Avg
+from django.db.models import Sum, Count, Avg, F
 from django.utils import timezone
 from datetime import timedelta
 
@@ -26,7 +26,7 @@ def index(request):
     # 商品统计
     total_products = Product.objects.count()
     active_products = total_products
-    low_stock_products = Inventory.objects.filter(quantity__lte=10).count()
+    low_stock_products = Inventory.objects.filter(quantity__lte=F('warning_level')).count()
     out_of_stock_products = Inventory.objects.filter(quantity=0).count()
     
     # 销售统计
