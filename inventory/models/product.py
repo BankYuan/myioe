@@ -1,3 +1,6 @@
+import os
+import re
+
 from django.db import models
 from django.core.exceptions import ValidationError
 
@@ -45,6 +48,36 @@ def _gen_scan_code():
         code = twelve + str(_ean13_checksum(twelve))
         if not Product.objects.filter(scan_code=code).exists():
             return code
+
+
+def product_image_path(instance, filename):
+    """商品图片在 MinIO 的存储路径:products/{款号}/{图片类型}_{序号}.{扩展名}
+
+    按款号(model_no)分目录,MinIO 控制台里同款图聚在一起,一眼认出是哪款鞋;
+    文件名含图片类型(main/side/sole/detail/on_foot)+ 该款该类型下的递增序号,避免重名。
+    款号为空或含非法字符时归到 _unsorted/。
+
+    instance 可能是 ProductImage(带 .product)或 Product(自身)。
+    """
+    product = getattr(instance, 'product', None) or instance
+    model_no = (getattr(product, 'model_no', '') or '').strip()
+    image_type = getattr(instance, 'image_type', '') or 'main'
+    ext = os.path.splitext(filename)[1].lower() or '.jpg'
+
+    # 目录名只保留字母/数字/横线,其余(空格、斜杠、中文等)替换成 _,避免破坏 S3 路径
+    folder = re.sub(r'[^a-zA-Z0-9\-]', '_', model_no).strip('_') or '_unsorted'
+
+    # 该款该类型已有图片数 +1 作为序号(同款多张主图 main_01/02/... 不重名)
+    if model_no:
+        seq = ProductImage.objects.filter(
+            product__model_no=model_no, image_type=image_type
+        ).count() + 1
+    else:
+        seq = ProductImage.objects.filter(
+            product=product, image_type=image_type
+        ).count() + 1
+
+    return f'products/{folder}/{image_type}_{seq:02d}{ext}'
 
 
 class Product(models.Model):
@@ -127,7 +160,7 @@ class Product(models.Model):
     description = models.TextField(blank=True, verbose_name='商品描述')
     price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='售价')
     cost = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='成本价')
-    image = models.ImageField(upload_to='products/', blank=True, null=True, verbose_name='商品图片')
+    image = models.ImageField(upload_to=product_image_path, blank=True, null=True, verbose_name='商品图片')
     # 新增字段
     specification = models.CharField(max_length=200, blank=True, verbose_name='规格')
     manufacturer = models.CharField(max_length=200, blank=True, verbose_name='制造商')
@@ -168,7 +201,7 @@ class ProductImage(models.Model):
     ]
     product = models.ForeignKey(Product, related_name='images', on_delete=models.CASCADE, verbose_name='商品')
     image_type = models.CharField(max_length=20, choices=IMAGE_TYPES, default='main', verbose_name='图片类型')
-    image = models.ImageField(upload_to='products/', verbose_name='图片')
+    image = models.ImageField(upload_to=product_image_path, verbose_name='图片')
     thumbnail = models.CharField(max_length=255, blank=True, null=True, verbose_name='缩略图路径')
     alt_text = models.CharField(max_length=255, blank=True, verbose_name='替代文本')
     order = models.IntegerField(default=0, verbose_name='排序')
