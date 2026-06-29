@@ -68,6 +68,9 @@ services:
       - MINIO_PUBLIC_DOMAIN=${MINIO_PUBLIC_DOMAIN:-localhost:9002/ioe-media}
       - DIFY_BASE_URL=${DIFY_BASE_URL:-http://host.docker.internal}
       - DIFY_RECEIPT_API_KEY=${DIFY_RECEIPT_API_KEY:-}
+    networks:
+      - default
+      - dify_net
 
 volumes:
   static_volume: {}
@@ -75,3 +78,9 @@ volumes:
   db_volume: {}
   pg_data: {}
   minio_data: {}
+
+networks:
+  default: {}
+  dify_net:
+    name: docker_default
+    external: true
