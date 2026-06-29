@@ -71,4 +71,22 @@ def level_selector(levels, selected_id=None):
     return {
         'levels': levels,
         'selected_id': selected_id
-    } 
+    }
+
+
+@register.simple_tag(takes_context=True)
+def querystring_url(context, **overrides):
+    """重建带筛选参数的 querystring:保留 request.GET 全部参数,删掉旧 page,用 overrides 覆盖。
+
+    供 _pagination.html 翻页链接用,自动带上当前页所有筛选参数,只覆盖 page=N。
+    用法:href="?{% querystring_url page=5 %}"
+    """
+    from urllib.parse import urlencode
+    request = context.get('request')
+    if request is None:
+        # 兜底:无 request 上下文(理论上不会发生,settings 已开 context_processors.request)
+        return urlencode(overrides)
+    params = request.GET.copy()
+    params.pop('page', None)  # 删旧 page,避免叠加成 page=2&page=5
+    params.update(overrides)
+    return params.urlencode() 

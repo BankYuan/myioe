@@ -145,66 +145,10 @@
                             </table>
                         </div>
 
-                        <!-- 分页 -->
+                        <!-- 分页(公共片段,筛选参数自动保留) -->
                         {% if logs.has_other_pages %}
-                        <nav aria-label="Page navigation" class="mt-4">
-                            <ul class="pagination justify-content-center">
-                                {% if logs.has_previous %}
-                                <li class="page-item">
-                                    <a class="page-link" href="?page=1{% if selected_action %}&action={{ selected_action }}{% endif %}{% if start_date %}&start_date={{ start_date|date:'Y-m-d' }}{% endif %}{% if end_date %}&end_date={{ end_date|date:'Y-m-d' }}{% endif %}" aria-label="First">
-                                        <span aria-hidden="true">&laquo;&laquo;</span>
-                                    </a>
-                                </li>
-                                <li class="page-item">
-                                    <a class="page-link" href="?page={{ logs.previous_page_number }}{% if selected_action %}&action={{ selected_action }}{% endif %}{% if start_date %}&start_date={{ start_date|date:'Y-m-d' }}{% endif %}{% if end_date %}&end_date={{ end_date|date:'Y-m-d' }}{% endif %}" aria-label="Previous">
-                                        <span aria-hidden="true">&laquo;</span>
-                                    </a>
-                                </li>
-                                {% else %}
-                                <li class="page-item disabled">
-                                    <a class="page-link" href="#" aria-label="First">
-                                        <span aria-hidden="true">&laquo;&laquo;</span>
-                                    </a>
-                                </li>
-                                <li class="page-item disabled">
-                                    <a class="page-link" href="#" aria-label="Previous">
-                                        <span aria-hidden="true">&laquo;</span>
-                                    </a>
-                                </li>
-                                {% endif %}
-                                
-                                {% for num in logs.paginator.page_range %}
-                                    {% if logs.number == num %}
-                                    <li class="page-item active"><a class="page-link" href="#">{{ num }}</a></li>
-                                    {% elif num > logs.number|add:'-3' and num < logs.number|add:'3' %}
-                                    <li class="page-item"><a class="page-link" href="?page={{ num }}{% if selected_action %}&action={{ selected_action }}{% endif %}{% if start_date %}&start_date={{ start_date|date:'Y-m-d' }}{% endif %}{% if end_date %}&end_date={{ end_date|date:'Y-m-d' }}{% endif %}">{{ num }}</a></li>
-                                    {% endif %}
-                                {% endfor %}
-                                
-                                {% if logs.has_next %}
-                                <li class="page-item">
-                                    <a class="page-link" href="?page={{ logs.next_page_number }}{% if selected_action %}&action={{ selected_action }}{% endif %}{% if start_date %}&start_date={{ start_date|date:'Y-m-d' }}{% endif %}{% if end_date %}&end_date={{ end_date|date:'Y-m-d' }}{% endif %}" aria-label="Next">
-                                        <span aria-hidden="true">&raquo;</span>
-                                    </a>
-                                </li>
-                                <li class="page-item">
-                                    <a class="page-link" href="?page={{ logs.paginator.num_pages }}{% if selected_action %}&action={{ selected_action }}{% endif %}{% if start_date %}&start_date={{ start_date|date:'Y-m-d' }}{% endif %}{% if end_date %}&end_date={{ end_date|date:'Y-m-d' }}{% endif %}" aria-label="Last">
-                                        <span aria-hidden="true">&raquo;&raquo;</span>
-                                    </a>
-                                </li>
-                                {% else %}
-                                <li class="page-item disabled">
-                                    <a class="page-link" href="#" aria-label="Next">
-                                        <span aria-hidden="true">&raquo;</span>
-                                    </a>
-                                </li>
-                                <li class="page-item disabled">
-                                    <a class="page-link" href="#" aria-label="Last">
-                                        <span aria-hidden="true">&raquo;&raquo;</span>
-                                    </a>
-                                </li>
-                                {% endif %}
-                            </ul>
+                        <nav class="mt-4">
+                            {% include 'inventory/_pagination.html' with page_obj=logs %}
                         </nav>
                         {% endif %}
                     {% else %}

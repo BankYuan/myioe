@@ -169,23 +169,9 @@
                 </div>
 
                 {% if page_obj.has_other_pages %}
-                <nav aria-label="Page navigation" class="mt-4">
-                    <ul class="pagination pagination-sm justify-content-center mb-0">
-                        {% if page_obj.has_previous %}
-                        <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if kind %}&kind={{ kind }}{% endif %}">&laquo;</a></li>
-                        {% endif %}
-                        {% for n in page_obj.paginator.page_range %}
-                            {% if page_obj.number == n %}
-                            <li class="page-item active"><span class="page-link">{{ n }}</span></li>
-                            {% elif n > page_obj.number|add:'-3' and n < page_obj.number|add:'3' %}
-                            <li class="page-item"><a class="page-link" href="?page={{ n }}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if kind %}&kind={{ kind }}{% endif %}">{{ n }}</a></li>
-                            {% endif %}
-                        {% endfor %}
-                        {% if page_obj.has_next %}
-                        <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if kind %}&kind={{ kind }}{% endif %}">&raquo;</a></li>
-                        {% endif %}
-                    </ul>
-                </nav>
+                <div class="mt-4">
+                    {% include 'inventory/_pagination.html' with page_obj=page_obj show_total='no' %}
+                </div>
                 {% endif %}
             </div>
         </div>

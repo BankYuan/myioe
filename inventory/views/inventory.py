@@ -93,22 +93,28 @@ def inventory_list(request):
         if inv.is_low_stock:
             g['low_count'] += 1
 
-    # 批量给款组带图片池(列表缩略图点击可预览/切换该款所有图)
-    from inventory.models import ProductImage
+    # 款级分页(每页 20 款,与商品页一致);先分页再查图片池,避免查全量款的图
+    from inventory.utils.query_utils import paginate_queryset
     inventory_groups = list(groups.values())
-    group_model_nos = {g['model_no'] for g in inventory_groups if g.get('model_no')}
+    page_obj = paginate_queryset(inventory_groups, request.GET.get('page', 1), 20)
+
+    # 只给当前页款组带图片池(列表缩略图点击可预览/切换该款所有图);批量查避免 N+1
+    from inventory.models import ProductImage
+    page_groups = list(page_obj.object_list)
+    page_model_nos = {g['model_no'] for g in page_groups if g.get('model_no')}
     style_imgs = {}
-    if group_model_nos:
-        for pi in ProductImage.objects.filter(product__model_no__in=group_model_nos).select_related('product').order_by('order', 'id'):
+    if page_model_nos:
+        for pi in ProductImage.objects.filter(product__model_no__in=page_model_nos).select_related('product').order_by('order', 'id'):
             style_imgs.setdefault(pi.product.model_no, []).append(pi.image.url)
-    for g in inventory_groups:
+    for g in page_groups:
         if g.get('model_no'):
             g['images'] = style_imgs.get(g['model_no'], [])
         else:
             g['images'] = [g['image'].url] if g.get('image') else []
 
     context = {
-        'inventory_groups': inventory_groups,
+        'page_obj': page_obj,
+        'inventory_groups': page_groups,
         'categories': categories,
         'colors': colors,
         'sizes': sizes,
