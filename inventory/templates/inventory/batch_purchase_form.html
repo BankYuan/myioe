@@ -3,6 +3,12 @@
 {% block title %}批量进货录入 - {{ block.super }}{% endblock %}
 
 {% block content %}
+<style>
+/* 行序号:用 CSS counter 自动编号,加行/删行后序号自动连续,无需 JS 维护 */
+#batch-table { counter-reset: rownum; }
+#batch-table tbody tr { counter-increment: rownum; }
+#batch-table tbody tr td.row-num::before { content: counter(rownum); }
+</style>
 <div class="row mb-3">
     <div class="col-12">
         <div class="card">
@@ -61,6 +67,7 @@
                 <table class="table table-sm align-middle" id="batch-table">
                     <thead class="table-light">
                         <tr>
+                            <th class="text-center" style="width:4%">#</th>
                             <th style="width:11%">款号</th>
                             <th style="width:16%">商品名</th>
                             <th style="width:15%">鞋类目</th>
@@ -75,6 +82,7 @@
                     <tbody>
                         {% for f in formset %}
                         <tr class="batch-row">
+                            <td class="row-num text-center text-muted"></td>
                             <td>{{ f.model_no }}</td>
                             <td>{{ f.name }}</td>
                             <td>{{ f.category }}</td>
