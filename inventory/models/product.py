@@ -160,6 +160,10 @@ class Product(models.Model):
     description = models.TextField(blank=True, verbose_name='商品描述')
     price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='售价')
     cost = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='成本价')
+    discount_price = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        verbose_name='折后价',
+        help_text='可选;为空时吊牌只显示售价一档')
     image = models.ImageField(upload_to=product_image_path, blank=True, null=True, verbose_name='商品图片')
     # 新增字段
     specification = models.CharField(max_length=200, blank=True, verbose_name='规格')
@@ -171,15 +175,19 @@ class Product(models.Model):
     is_active = models.BooleanField(default=True, verbose_name='是否启用')
     
     def clean(self):
-        if self.price < 0:
-            raise ValidationError('售价不能为负数')
-        if self.cost < 0:
+        # 只校验成本价(price/discount_price 由 save() 按公式自动重算,不做二次校验)
+        if self.cost is not None and self.cost < 0:
             raise ValidationError('成本价不能为负数')
 
     def save(self, *args, **kwargs):
         # 自动生成扫码码(scan_code,合法 EAN-13),供扫码枪扫描/贴纸打印;与商品条码(可含款号色码)分离
         if not self.scan_code:
             self.scan_code = _gen_scan_code()
+        # 定价公式:售价=成本×2.3,折后价=售价×0.75,四舍五入到整数
+        from decimal import Decimal, ROUND_HALF_UP
+        if self.cost is not None and self.cost > 0:
+            self.price = (self.cost * Decimal('2.3')).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+            self.discount_price = (self.price * Decimal('0.75')).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
         super().save(*args, **kwargs)
 
     class Meta:

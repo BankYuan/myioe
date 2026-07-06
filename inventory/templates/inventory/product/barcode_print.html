@@ -1,11 +1,11 @@
 {% extends 'inventory/base.html' %}
 {% load static %}
 
-{% block title %}打印条码贴纸{% endblock %}
+{% block title %}打印商品小票{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3 no-print">
-    <h5 class="mb-0">条码贴纸打印 <small class="text-muted">共 {{ products|length }} 个色码</small></h5>
+    <h5 class="mb-0">商品小票打印 <small class="text-muted">共 {{ products|length }} 个色码</small></h5>
     <div class="d-flex gap-2 align-items-center">
         <label class="small text-muted mb-0">每张份数</label>
         <input type="number" id="copies" value="1" min="1" max="20" class="form-control form-control-sm" style="width:70px">
@@ -14,13 +14,32 @@
     </div>
 </div>
 
-<div id="labels" class="labels-grid">
+<div id="labels" class="tickets-grid">
     {% for p in products %}
-    <div class="label-card" data-scan="{{ p.scan_code }}">
-        <svg class="bc"></svg>
-        <div class="bc-text">{{ p.scan_code }}</div>
-        <div class="prod-name">{{ p.name }}</div>
-        <div class="prod-info">{{ p.model_no|default:'' }}{% if p.color %} · {{ p.color }}{% endif %}{% if p.size %} · {{ p.size }}码{% endif %}</div>
+    <div class="ticket" data-scan="{{ p.scan_code }}">
+        <div class="ticket-shop">广百圆鞋业</div>
+        <div class="ticket-divider"></div>
+
+        <div class="ticket-meta">
+            {% if p.model_no %}<div><span class="k">货号</span><span class="v">{{ p.model_no }}</span></div>{% endif %}
+            {% if p.size %}<div><span class="k">尺码</span><span class="v">{{ p.size }}</span></div>{% endif %}
+        </div>
+
+        <div class="ticket-price">
+            {% if p.discount_price %}
+            <div class="price-original">原价 ¥{{ p.price|floatformat:2 }}</div>
+            <div class="price-discount">折后 ¥{{ p.discount_price|floatformat:2 }}</div>
+            {% else %}
+            <div class="price-single">售价 ¥{{ p.price|floatformat:2 }}</div>
+            {% endif %}
+        </div>
+
+        <div class="ticket-divider light"></div>
+
+        <div class="ticket-barcode">
+            <svg class="bc"></svg>
+            <div class="bc-text">{{ p.scan_code }}</div>
+        </div>
     </div>
     {% empty %}
     <div class="text-muted p-4">没有可打印的商品</div>
@@ -30,52 +49,113 @@
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 <script>
 function renderLabels() {
-    document.querySelectorAll('.label-card').forEach(function(card) {
-        var scan = card.dataset.scan;
-        if (scan) {
+    document.querySelectorAll('.ticket').forEach(function(t) {
+        var scan = t.dataset.scan;
+        var bcSvg = t.querySelector('.bc');
+        if (scan && bcSvg) {
             try {
-                JsBarcode(card.querySelector('.bc'), scan, {
-                    format: 'EAN13', width: 2, height: 40, fontSize: 14, displayValue: false, margin: 2
+                JsBarcode(bcSvg, scan, {
+                    format: 'CODE128',
+                    width: 2.5,        // 加粗条,避免屏幕拉伸后糊掉
+                    height: 60,        // 加高,提高识别率
+                    fontSize: 14,
+                    displayValue: false,
+                    margin: 10,        // 静区(quiet zone)必须留够,否则扫不出
+                    background: '#ffffff',
+                    lineColor: '#000000'
                 });
-            } catch (e) { card.querySelector('.bc').textContent = '无效EAN13'; }
+            } catch (e) {
+                bcSvg.textContent = '条码生成失败';
+            }
         }
     });
 }
 renderLabels();
+
 // 每张打印 N 份
 document.getElementById('copies').addEventListener('input', function() {
     var n = parseInt(this.value) || 1;
     var grid = document.getElementById('labels');
-    var originals = grid.querySelectorAll('.label-card[data-original]');
+    var originals = grid.querySelectorAll('.ticket[data-original]');
     if (!originals.length) {
-        document.querySelectorAll('.label-card').forEach(function(c){ c.setAttribute('data-original','1'); });
-        originals = grid.querySelectorAll('.label-card[data-original]');
+        document.querySelectorAll('.ticket').forEach(function(c){ c.setAttribute('data-original','1'); });
+        originals = grid.querySelectorAll('.ticket[data-original]');
     }
     grid.innerHTML = '';
-    originals.forEach(function(card) {
+    originals.forEach(function(t) {
         for (var i = 0; i < n; i++) {
-            var clone = card.cloneNode(true);
+            var clone = t.cloneNode(true);
             clone.removeAttribute('data-original');
+            clone.querySelector('.bc').innerHTML = '';
             grid.appendChild(clone);
         }
+    });
+    document.querySelectorAll('.ticket').forEach(function(c, i){
+        if (i < originals.length) c.setAttribute('data-original','1');
     });
     renderLabels();
 });
 </script>
 
 <style>
-.labels-grid { display: flex; flex-wrap: wrap; gap: 4px; }
-.label-card { border: 1px dashed #bbb; padding: 4px 6px; width: 200px; text-align: center; page-break-inside: avoid; }
-.label-card svg { width: 100%; height: 50px; }
-.bc-text { font-family: monospace; font-size: 11px; letter-spacing: 1px; }
-.prod-name { font-size: 11px; font-weight: bold; margin-top: 2px; }
-.prod-info { font-size: 10px; color: #555; }
+/* 屏幕预览 */
+.tickets-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+.ticket {
+    width: 340px;
+    background: #fff;
+    color: #000;
+    padding: 5px 7px;
+    box-sizing: border-box;
+    border: 1px dashed #999;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+}
+.ticket-shop {
+    font-size: 15px; font-weight: bold; text-align: center;
+    letter-spacing: 1px; padding: 1px 0 3px;
+}
+.ticket-divider { border-top: 1px solid #000; margin: 0 0 4px; }
+.ticket-divider.light { border-top: 1px dashed #bbb; margin: 4px 0; }
+.ticket-meta div {
+    display: flex; justify-content: space-between;
+    font-size: 12px; line-height: 1.5;
+}
+.ticket-meta .k { color: #555; }
+.ticket-meta .v { font-weight: bold; }
+.ticket-price { text-align: center; padding: 3px 0 2px; }
+.price-original { font-size: 11px; color: #888; text-decoration: line-through; }
+.price-discount { font-size: 20px; font-weight: bold; color: #d00; line-height: 1.2; }
+.price-single { font-size: 20px; font-weight: bold; color: #000; line-height: 1.2; }
+.ticket-barcode { text-align: center; }
+/* 关键:不强制拉伸 SVG,让条码按原生像素渲染,避免抗锯齿把黑条变糊 */
+.ticket-barcode svg { display: inline-block; height: 60px; width: auto; max-width: 100%; }
+.bc-text { font-family: monospace; font-size: 11px; letter-spacing: 1px; margin-top: 2px; }
+
+/* 打印:58mm 热敏小票,连续走纸模式(适配 XP-58) */
 @media print {
-    .no-print, nav { display: none !important; }
-    body { background: #fff !important; }
-    .container { max-width: 100% !important; padding: 0 !important; }
-    .labels-grid { gap: 2px; }
-    .label-card { border: 1px solid #000; width: 48%; }
+    .no-print, nav, header, footer { display: none !important; }
+    body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+    .container { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
+    /* 不写 @page size: XP-58 驱动只认 58×210/297/3276 三种固定纸长,
+       CSS 写自定义尺寸浏览器找不到匹配就回退成最长(3276mm),一桶纸走空。
+       改为:打印对话框手动选 58×3276(连续长纸),让打印机按实际内容走纸。 */
+    .tickets-grid { display: block !important; gap: 0 !important; }
+    .ticket {
+        width: 58mm;
+        box-sizing: border-box;
+        border: none;
+        /* 撕纸线:每张票底部虚线,打完沿虚线撕开(XP-58 无自动切刀) */
+        border-bottom: 1px dashed #000;
+        page-break-inside: avoid;   /* 单张票不被分页截断 */
+        padding: 2mm 2mm 3mm;
+        margin: 0;
+    }
+    .ticket:last-child { border-bottom: none; }
+    .ticket-shop { font-size: 13px; }
+    .ticket-meta div { font-size: 11px; }
+    .price-discount, .price-single { font-size: 16px; }
+    .price-original { font-size: 10px; }
+    .ticket-barcode svg { height: 48px; }
+    .bc-text { font-size: 10px; }
 }
 </style>
 {% endblock %}

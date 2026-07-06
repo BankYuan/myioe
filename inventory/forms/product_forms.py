@@ -64,12 +64,13 @@ class ProductForm(forms.ModelForm):
 
     class Meta:
         model = Product
-        fields = ['barcode', 'scan_code', 'model_no', 'name', 'category', 'supplier', 'color', 'size', 'price', 'cost', 'image', 'is_active']
+        fields = ['barcode', 'scan_code', 'model_no', 'name', 'category', 'supplier', 'color', 'size', 'price', 'discount_price', 'cost', 'image', 'is_active']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '请输入商品名称', 'aria-label': '商品名称'}),
             'model_no': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '款号(同款共享)', 'aria-label': '款号'}),
             'scan_code': forms.TextInput(attrs={'class': 'form-control', 'readonly': True, 'aria-label': '扫码码(贴纸条码,EAN-13自动生成)'}),
             'price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': '售价', 'inputmode': 'decimal', 'aria-label': '售价'}),
+            'discount_price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': '折后价(可选)', 'inputmode': 'decimal', 'aria-label': '折后价'}),
             'cost': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': '成本价', 'inputmode': 'decimal', 'aria-label': '成本价'}),
             'category': forms.Select(attrs={'class': 'form-control form-select', 'aria-label': '商品分类'}),
             'supplier': forms.Select(attrs={'class': 'form-control form-select', 'aria-label': '供应商'}),

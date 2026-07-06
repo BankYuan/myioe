@@ -73,8 +73,9 @@
                             <th style="width:15%">鞋类目</th>
                             <th style="width:7%">尺码</th>
                             <th style="width:8%">颜色</th>
-                            <th style="width:9%">售价</th>
-                            <th style="width:9%">成本</th>
+                            <th style="width:8%">售价</th>
+                            <th style="width:8%">折后价</th>
+                            <th style="width:8%">成本</th>
                             <th style="width:7%">数量</th>
                             <th style="width:4%"></th>
                         </tr>
@@ -89,6 +90,7 @@
                             <td>{{ f.size }}</td>
                             <td>{{ f.color }}</td>
                             <td>{{ f.price }}</td>
+                            <td>{{ f.discount_price }}</td>
                             <td>{{ f.cost }}</td>
                             <td>{{ f.quantity }}</td>
                             <td><button type="button" class="btn btn-sm btn-outline-danger del-row py-0 px-1">×</button></td>
@@ -142,6 +144,31 @@ document.querySelectorAll('input[name="direction"]').forEach(r => {
         btn.classList.toggle('btn-success', !out);
         document.getElementById('submit-text').textContent = out ? '确认提交(退货出库)' : '确认提交(建档 + 入库)';
     });
+});
+
+// 定价联动(每行):成本→售价(×2.3)→折后(售价×0.75)。事件委托,新增行也生效。
+const COST_X = 2.3, PRICE_X_DISCOUNT = 0.75;
+const round2 = x => Math.round(x);
+tbody.addEventListener('input', e => {
+    const t = e.target;
+    if (!t.name) return;
+    const row = t.closest('tr.batch-row');
+    if (!row) return;
+    const f = sfx => row.querySelector(`[name$="-${sfx}"]`);
+    const priceEl = f('price'), discEl = f('discount_price');
+    if (t.name.endsWith('-cost')) {
+        const c = parseFloat(t.value);
+        if (!isNaN(c) && c > 0 && priceEl && discEl) {
+            const p = round2(c * COST_X);
+            priceEl.value = p.toFixed(2);
+            discEl.value = round2(p * PRICE_X_DISCOUNT).toFixed(2);
+        }
+    } else if (t.name.endsWith('-price')) {
+        const p = parseFloat(t.value);
+        if (!isNaN(p) && p > 0 && discEl) {
+            discEl.value = round2(p * PRICE_X_DISCOUNT).toFixed(2);
+        }
+    }
 });
 </script>
 {% endblock %}

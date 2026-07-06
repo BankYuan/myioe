@@ -35,10 +35,11 @@
     <section class="form-section">
         <div class="form-section-title">价格与库存</div>
         <div class="row g-3">
-            <div class="col-md-4">{{ form.cost|as_crispy_field }}</div>
-            <div class="col-md-4">{{ form.price|as_crispy_field }}</div>
+            <div class="col-md-3">{{ form.cost|as_crispy_field }}</div>
+            <div class="col-md-3">{{ form.price|as_crispy_field }}</div>
+            <div class="col-md-3">{{ form.discount_price|as_crispy_field }}</div>
             {% if 'warning_level' in form.fields %}
-            <div class="col-md-4">{{ form.warning_level|as_crispy_field }}</div>
+            <div class="col-md-3">{{ form.warning_level|as_crispy_field }}</div>
             {% endif %}
         </div>
     </section>
@@ -157,6 +158,30 @@
                     img.className = 'img-thumbnail';
                     img.style.cssText = 'height:80px;object-fit:cover';
                     bulkPreview.appendChild(img);
+                }
+            });
+        }
+
+        // 定价联动:成本价→售价(×2.3)→折后价(售价×0.75)
+        // 改成本自动算出售价和折后;改售价只重算折后。手改后可覆盖,程序填值不触发 input,无循环。
+        var COST_X = 2.3, PRICE_X_DISCOUNT = 0.75;
+        var costEl = document.getElementById('id_cost');
+        var priceEl = document.getElementById('id_price');
+        var discEl = document.getElementById('id_discount_price');
+        var round2 = function(x){ return Math.round(x); };
+        if (costEl && priceEl && discEl) {
+            costEl.addEventListener('input', function(){
+                var c = parseFloat(costEl.value);
+                if (!isNaN(c) && c > 0) {
+                    var p = round2(c * COST_X);
+                    priceEl.value = p.toFixed(2);
+                    discEl.value = round2(p * PRICE_X_DISCOUNT).toFixed(2);
+                }
+            });
+            priceEl.addEventListener('input', function(){
+                var p = parseFloat(priceEl.value);
+                if (!isNaN(p) && p > 0) {
+                    discEl.value = round2(p * PRICE_X_DISCOUNT).toFixed(2);
                 }
             });
         }

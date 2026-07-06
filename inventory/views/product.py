@@ -543,7 +543,7 @@ def product_import(request):
                                             required_headers=['name', 'price'],
                                             expected_headers=['name', 'category', 'price', 'cost',
                                                             'barcode', 'model_no', 'color', 'size',
-                                                            'specification', 'manufacturer'])
+                                                            'specification', 'manufacturer', 'discount_price'])
             
             if not validation_result['valid']:
                 messages.error(request, f"CSV文件验证失败: {validation_result['errors']}")
@@ -577,9 +577,9 @@ def product_import(request):
     
     # 生成样例CSV数据
     sample_data = [
-        ['name', 'category', 'price', 'cost', 'barcode', 'model_no', 'color', 'size', 'specification'],
-        ['示例板鞋A', '运动休闲', '399.00', '240.00', '6900000000001', 'SKU-BOARD-A', 'white', '41', '41码'],
-        ['示例板鞋A', '运动休闲', '399.00', '240.00', '6900000000002', 'SKU-BOARD-A', 'white', '42', '42码'],
+        ['name', 'category', 'price', 'cost', 'barcode', 'model_no', 'color', 'size', 'specification', 'discount_price'],
+        ['示例板鞋A', '运动休闲', '399.00', '240.00', '6900000000001', 'SKU-BOARD-A', 'white', '41', '41码', '299.00'],
+        ['示例板鞋A', '运动休闲', '399.00', '240.00', '6900000000002', 'SKU-BOARD-A', 'white', '42', '42码', '299.00'],
     ]
     
     # 创建内存中的CSV

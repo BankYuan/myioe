@@ -935,6 +935,7 @@ def batch_purchase_create(request):
                         uncat.append(cd['name'])
                     cost = cd.get('cost') if cd.get('cost') is not None else None
                     price = cd.get('price') or None
+                    discount_price = cd.get('discount_price') or None
                     if price is None:
                         # 售价未填:用成本兜底(避免 0),事后提示补售价
                         price = cost if cost is not None else 0
@@ -945,7 +946,8 @@ def batch_purchase_create(request):
                     product, was_created = Product.objects.get_or_create(
                         barcode=barcode,
                         defaults={'name': cd['name'], 'model_no': model_no, 'category': category,
-                                  'price': price, 'cost': cost, 'size': size, 'color': color,
+                                  'price': price, 'discount_price': discount_price, 'cost': cost,
+                                  'size': size, 'color': color,
                                   'supplier': supplier, 'is_active': True})
                     # 款若已有图,同步到本 SKU(款图共享)
                     try:

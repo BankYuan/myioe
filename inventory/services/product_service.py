@@ -45,6 +45,7 @@ def import_products_from_csv(csv_file, user):
     size_idx = headers_lower.index('size') if 'size' in headers_lower else -1
     specification_idx = headers_lower.index('specification') if 'specification' in headers_lower else -1
     manufacturer_idx = headers_lower.index('manufacturer') if 'manufacturer' in headers_lower else -1
+    discount_price_idx = headers_lower.index('discount_price') if 'discount_price' in headers_lower else -1
     
     # 处理每一行数据
     for row_num, row in enumerate(csv_data, start=2):  # 从2开始，因为1是表头
@@ -90,11 +91,22 @@ def import_products_from_csv(csv_file, user):
             
             # 创建商品
             with transaction.atomic():
+                # 折后价(可选列);为空或非法则留空
+                discount_price_val = None
+                if discount_price_idx >= 0 and row[discount_price_idx]:
+                    try:
+                        dp = float(str(row[discount_price_idx]).replace(',', ''))
+                        if 0 < dp <= price:
+                            discount_price_val = dp
+                    except (ValueError, IndexError):
+                        discount_price_val = None
+
                 product = Product.objects.create(
                     name=name,
                     category=category,
                     price=price,
-                    cost=float(row[cost_idx]) if cost_idx >= 0 and row[cost_idx] else price * 0.7,
+                    cost=float(row[cost_idx]) if cost_idx >= 0 and row[cost_idx] else round(price / 2.3),
+                    discount_price=discount_price_val,
                     barcode=row[barcode_idx].strip() if barcode_idx >= 0 and row[barcode_idx] else None,
                     model_no=row[model_no_idx].strip() if model_no_idx >= 0 and row[model_no_idx] else "",
                     color=row[color_idx].strip() if color_idx >= 0 and row[color_idx] else "",

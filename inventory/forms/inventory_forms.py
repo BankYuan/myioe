@@ -91,6 +91,7 @@ class BatchPurchaseItemForm(forms.Form):
     size = forms.CharField(label='尺码', required=False, widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': '尺码'}))
     color = forms.CharField(label='颜色', required=False, widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': '颜色'}))
     price = forms.DecimalField(label='售价', required=False, decimal_places=2, widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': '售价'}))
+    discount_price = forms.DecimalField(label='折后价', required=False, decimal_places=2, widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': '折后价'}))
     cost = forms.DecimalField(label='成本', required=False, decimal_places=2, widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': '成本'}))
     quantity = forms.IntegerField(label='数量', required=False, min_value=1, widget=forms.NumberInput(attrs={'class': 'form-control', 'placeholder': '数量'}))
 
