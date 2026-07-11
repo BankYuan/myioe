@@ -1,0 +1,214 @@
+{% extends 'inventory/base.html' %}
+{% load static %}
+
+{% block title %}打印商品小票{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 no-print">
+    <h5 class="mb-0">商品小票打印 <small class="text-muted">共 {{ products|length }} 个色码</small></h5>
+    <div class="d-flex gap-2 align-items-center">
+        <label class="small text-muted mb-0">每张份数</label>
+        <input type="number" id="copies" value="1" min="1" max="20" class="form-control form-control-sm" style="width:70px">
+        <button class="btn btn-primary btn-sm" onclick="window.print()"><i class="bi bi-printer me-1"></i>打印</button>
+        <a href="{% url 'product_list' %}" class="btn btn-outline-secondary btn-sm">返回</a>
+    </div>
+</div>
+
+<div id="labels" class="tickets-grid">
+    {% for p in products %}
+    <div class="ticket" data-scan="{{ p.scan_code }}">
+        <div class="ticket-inner">
+            <div class="lab-shop">广百圆鞋业</div>
+            <div class="lab-sub">
+                {% if p.model_no %}{{ p.model_no }}{% endif %}{% if p.color %} · {{ p.color }}{% endif %}{% if p.size %} · {{ p.size }}码{% endif %}
+            </div>
+            <div class="lab-price">
+                <span class="orig">¥{{ p.price|floatformat:0 }}</span>
+                <span class="disc">¥{% if p.discount_price %}{{ p.discount_price|floatformat:0 }}{% else %}{{ p.price|floatformat:0 }}{% endif %}</span>
+            </div>
+            <div class="lab-barcode"><svg class="bc"></svg></div>
+            <div class="lab-code">{{ p.scan_code }}</div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="text-muted p-4">没有可打印的商品</div>
+    {% endfor %}
+</div>
+
+<style>
+/* 屏幕预览 */
+.tickets-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+.ticket {
+    width: 170px;
+    background: #fff;
+    color: #000;
+    padding: 5px 6px;
+    box-sizing: border-box;
+    border: 1px dashed #999;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+}
+.lab-shop { font-size: 13px; font-weight: bold; text-align: center; color:#000; letter-spacing:0.5px; }
+.lab-sub { font-size: 10px; font-weight: bold; text-align: center; color:#000; margin-top:2px; }
+.lab-price { display:flex; justify-content:center; align-items:baseline; gap:5px; margin-top:3px; }
+.lab-price .orig { font-size: 10px; color:#000; font-weight:bold; text-decoration: line-through; }
+.lab-price .disc { font-size: 15px; color:#000; font-weight:bold; }
+.lab-barcode { text-align: center; margin-top: 4px; }
+.lab-barcode svg { display: inline-block; height: 40px; width: 100%; max-width: 100%; }
+.lab-code { font-family: monospace; font-size: 8px; font-weight: bold; text-align: center; color:#000; }
+
+/* 打印: 纸物理40×30mm,驱动按纵向走,所以内容设计成纵向(30宽×40高) */
+/* 这样打出来物理方向才是对的(横向短胖标签上内容正向) */
+@media print {
+    nav, .navbar, .no-print, .alert, header, footer,
+    .main-content, .container { display: none !important; }
+
+    @page { size: 40mm 30mm landscape; margin: 0; }
+
+    html, body {
+        margin: 0 !important; padding: 0 !important;
+        width: 40mm !important;
+        display: block !important; background: #fff !important;
+    }
+
+    #labels {
+        display: block !important; padding: 0 !important;
+        margin: 0 !important; width: 40mm !important;
+    }
+
+    /* 票: 横向40×30,不旋转,文字居中、条码靠左 */
+    .ticket {
+        width: 40mm !important;
+        height: 30mm !important;
+        box-sizing: border-box !important; border: none !important;
+        padding: 1.5mm 2mm !important; margin: 0 !important;
+        overflow: hidden !important;
+        display: flex !important; flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        page-break-after: always !important;
+        page-break-inside: avoid !important;
+    }
+    .ticket:last-child { page-break-after: auto !important; }
+
+    /* 内层: 不旋转 */
+    .ticket-inner {
+        width: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    /* 1.店名:居中加粗 */
+    .lab-shop {
+        font-size: 9px; font-weight: bold; color: #000 !important;
+        text-align: center; letter-spacing: 0.3px; line-height: 1.1;
+        width: 100%;
+    }
+    /* 2.副信息:居中 */
+    .lab-sub {
+        font-size: 7px; font-weight: bold; color: #000 !important;
+        text-align: center; line-height: 1.1; width: 100%; margin-top: 1.5mm;
+    }
+    /* 3.价格:居中 */
+    .lab-price {
+        display: flex !important; justify-content: center !important;
+        align-items: baseline !important; gap: 1.5mm;
+        width: 100%; margin-top: 1.8mm;
+    }
+    .lab-price .orig {
+        font-size: 7.5px; color: #000 !important; font-weight: bold;
+        text-decoration: line-through; line-height: 1;
+    }
+    .lab-price .disc {
+        font-size: 12px; color: #000 !important; font-weight: bold; line-height: 1;
+    }
+    /* 4.条码:靠左,不撑满,贴左排列 */
+    .lab-barcode {
+        text-align: left; width: 100%; height: 10mm; margin-top: 1.5mm;
+    }
+    .lab-barcode svg {
+        width: auto !important; max-width: 34mm !important;
+        height: 10mm !important; display: block; margin-left: 0;
+    }
+    /* 编号:居中 */
+    .lab-code {
+        font-family: monospace; font-size: 6px; font-weight: bold; color: #000 !important;
+        text-align: center; line-height: 1; width: 100%; margin-top: 0.8mm;
+    }
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+<script>
+(function() {
+    var labels = document.getElementById('labels');
+    if (!labels) return;
+    document.body.appendChild(labels);
+    window.onbeforeprint = function() { document.body.appendChild(labels); };
+})();
+
+function renderLabels() {
+    document.querySelectorAll('.ticket').forEach(function(t) {
+        var scan = t.dataset.scan;
+        var bcSvg = t.querySelector('.bc');
+        if (scan && bcSvg) {
+            // 13位纯数字用 EAN13(更紧凑,条更粗,扫码枪识别率高);否则回退 CODE128
+            var fmt = (/^\d{13}$/.test(scan)) ? 'EAN13' : 'CODE128';
+            try {
+                JsBarcode(bcSvg, scan, {
+                    format: fmt,
+                    width: 2.2,         // 加粗:每条2.2px,EAN13下约0.32mm,扫码枪可靠识别
+                    height: 50,         // 加高:50px提高识别率
+                    fontSize: 0,
+                    displayValue: false,
+                    margin: 5,          // 静区留够,扫码枪靠它定位
+                    background: '#ffffff',
+                    lineColor: '#000000'
+                });
+            } catch (e) {
+                // EAN13校验位错时回退CODE128
+                if (fmt === 'EAN13') {
+                    try {
+                        JsBarcode(bcSvg, scan, {
+                            format: 'CODE128', width: 2, height: 50, fontSize: 0,
+                            displayValue: false, margin: 5,
+                            background: '#ffffff', lineColor: '#000000'
+                        });
+                    } catch (e2) { bcSvg.textContent = '条码生成失败'; }
+                } else {
+                    bcSvg.textContent = '条码生成失败';
+                }
+            }
+        }
+    });
+}
+renderLabels();
+
+document.getElementById('copies').addEventListener('input', function() {
+    var n = parseInt(this.value) || 1;
+    var grid = document.getElementById('labels');
+    var originals = grid.querySelectorAll('.ticket[data-original]');
+    if (!originals.length) {
+        document.querySelectorAll('.ticket').forEach(function(c){ c.setAttribute('data-original','1'); });
+        originals = grid.querySelectorAll('.ticket[data-original]');
+    }
+    grid.innerHTML = '';
+    originals.forEach(function(t) {
+        for (var i = 0; i < n; i++) {
+            var clone = t.cloneNode(true);
+            clone.removeAttribute('data-original');
+            clone.querySelector('.bc').innerHTML = '';
+            grid.appendChild(clone);
+        }
+    });
+    document.querySelectorAll('.ticket').forEach(function(c, i){
+        if (i < originals.length) c.setAttribute('data-original','1');
+    });
+    renderLabels();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,203 @@
+{% extends "inventory/base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+
+{% block title %}{% if form.instance.id %}编辑商品{% else %}添加新商品{% endif %}{% endblock %}
+
+{% block content %}
+<div class="page-head d-flex flex-wrap justify-content-between align-items-center gap-3">
+    <div>
+        <div class="page-title">{% if form.instance.id %}编辑商品 · {{ form.instance.name }}{% else %}添加新商品{% endif %}</div>
+        <div class="page-sub">带 <span class="text-danger">*</span> 为必填项;同款(款号相同)不同颜色/尺码分别建一条</div>
+    </div>
+    <a href="{% url 'product_list' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> 返回列表
+    </a>
+</div>
+
+<form method="post" enctype="multipart/form-data" id="product-form" class="needs-validation" novalidate>
+    {% csrf_token %}
+
+    <!-- 基本信息 -->
+    <section class="form-section">
+        <div class="form-section-title">基本信息</div>
+        <div class="row g-3">
+            <div class="col-md-6">{{ form.name|as_crispy_field }}</div>
+            <div class="col-md-6">{{ form.barcode|as_crispy_field }}</div>
+            <div class="col-md-6">{{ form.model_no|as_crispy_field }}</div>
+            <div class="col-md-6">{{ form.scan_code|as_crispy_field }}</div>
+            <div class="col-md-3">{{ form.category|as_crispy_field }}</div>
+            <div class="col-md-3">{{ form.supplier|as_crispy_field }}</div>
+        </div>
+    </section>
+
+    <!-- 价格与库存 -->
+    <section class="form-section">
+        <div class="form-section-title">价格与库存</div>
+        <div class="row g-3">
+            <div class="col-md-3">{{ form.cost|as_crispy_field }}</div>
+            <div class="col-md-3">{{ form.price|as_crispy_field }}</div>
+            <div class="col-md-3">{{ form.discount_price|as_crispy_field }}</div>
+            {% if 'warning_level' in form.fields %}
+            <div class="col-md-3">{{ form.warning_level|as_crispy_field }}</div>
+            {% endif %}
+        </div>
+    </section>
+
+    <!-- 颜色和尺码 -->
+    <section class="form-section">
+        <div class="form-section-title">颜色和尺码 <small>可输入或下拉选</small></div>
+        <div class="row g-3">
+            <div class="col-md-6">{{ form.color|as_crispy_field }}</div>
+            <div class="col-md-6">{{ form.size|as_crispy_field }}</div>
+        </div>
+        <datalist id="id_color_options">
+            <option value="黑色"><option value="白色"><option value="红色"><option value="蓝色">
+            <option value="绿色"><option value="米色"><option value="杏色"><option value="咖色">
+            <option value="灰色"><option value="粉色"><option value="棕色"><option value="橙色"><option value="紫色">
+        </datalist>
+        <datalist id="id_size_options">
+            <option value="35"><option value="36"><option value="37"><option value="38"><option value="39">
+            <option value="40"><option value="41"><option value="42"><option value="43"><option value="44">
+            <option value="34"><option value="34.5"><option value="S"><option value="M"><option value="L"><option value="均码">
+        </datalist>
+    </section>
+
+    <!-- 商品图片(整款共享:该款所有颜色尺码共用一组图) -->
+    <section class="form-section">
+        <div class="form-section-title">商品图片 <small>按款共享,一次可选多张</small></div>
+        <div class="mb-3">
+            <label class="form-label fw-bold" for="bulk-images">添加图片</label>
+            <input type="file" name="bulk_images" id="bulk-images" class="form-control" accept="image/*" multiple>
+            <div id="bulk-preview" class="d-flex flex-wrap gap-2 mt-2"></div>
+        </div>
+
+        {% if style_images %}
+        <hr class="my-3">
+        <div class="text-muted small mb-2">
+            <i class="bi bi-images"></i> 该款共 {{ style_images|length }} 张图(整款共享,编辑任何色码都看到这组)· 可改类型 / 删除
+        </div>
+        <div class="img-grid">
+            {% for img in style_images %}
+            <div class="img-cell">
+                <img src="{{ img.image.url }}" class="preview-img" data-full="{{ img.image.url }}" title="点击查看大图">
+                <div class="img-meta">
+                    <select name="img_type_{{ img.id }}" class="form-select form-select-sm mb-1" aria-label="图片类型">
+                        {% for v, t in image_types %}
+                        <option value="{{ v }}" {% if img.image_type == v %}selected{% endif %}>{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                    <label class="text-danger">
+                        <input type="checkbox" name="img_del_{{ img.id }}" value="1" class="form-check-input me-1"> 删除
+                    </label>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-muted small">该款还没有图片,上传后整款共享。</div>
+        {% endif %}
+    </section>
+
+    <!-- 其他设置 -->
+    <section class="form-section">
+        <div class="form-section-title">其他设置</div>
+        {% if 'is_active' in form.fields %}
+            {{ form.is_active|as_crispy_field }}
+        {% endif %}
+        {% if 'is_featured' in form.fields %}
+            {{ form.is_featured|as_crispy_field }}
+        {% endif %}
+    </section>
+
+    <div class="form-actions-bar">
+        <a href="{% url 'product_list' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-x-circle me-1"></i> 取消
+        </a>
+        <div class="d-flex gap-2">
+            {% if form.instance.id %}
+            <a href="{% url 'product_detail' form.instance.id %}" class="btn btn-outline-primary">
+                <i class="bi bi-eye me-1"></i> 查看详情
+            </a>
+            {% endif %}
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-circle me-1"></i> 保存商品
+            </button>
+        </div>
+    </div>
+</form>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 表单验证
+        var form = document.getElementById('product-form');
+        if (form) {
+            form.addEventListener('submit', function(event) {
+                if (this.checkValidity() === false) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                this.classList.add('was-validated');
+            });
+        }
+
+        // 批量上传:选图后预览缩略图
+        var bulkInput = document.getElementById('bulk-images');
+        var bulkPreview = document.getElementById('bulk-preview');
+        if (bulkInput && bulkPreview) {
+            bulkInput.addEventListener('change', function() {
+                bulkPreview.innerHTML = '';
+                var files = this.files;
+                if (!files || !files.length) return;
+                for (var i = 0; i < files.length; i++) {
+                    var img = document.createElement('img');
+                    img.src = URL.createObjectURL(files[i]);
+                    img.className = 'img-thumbnail';
+                    img.style.cssText = 'height:80px;object-fit:cover';
+                    bulkPreview.appendChild(img);
+                }
+            });
+        }
+
+        // 定价联动:成本价→售价(×2.3)→折后价(售价×0.75)
+        // 改成本自动算出售价和折后;改售价只重算折后。手改后可覆盖,程序填值不触发 input,无循环。
+        var COST_X = 2.3, PRICE_X_DISCOUNT = 0.75;
+        var costEl = document.getElementById('id_cost');
+        var priceEl = document.getElementById('id_price');
+        var discEl = document.getElementById('id_discount_price');
+        var round2 = function(x){ return Math.round(x); };
+        if (costEl && priceEl && discEl) {
+            costEl.addEventListener('input', function(){
+                var c = parseFloat(costEl.value);
+                if (!isNaN(c) && c > 0) {
+                    var p = round2(c * COST_X);
+                    priceEl.value = p.toFixed(2);
+                    discEl.value = round2(p * PRICE_X_DISCOUNT).toFixed(2);
+                }
+            });
+            priceEl.addEventListener('input', function(){
+                var p = parseFloat(priceEl.value);
+                if (!isNaN(p) && p > 0) {
+                    discEl.value = round2(p * PRICE_X_DISCOUNT).toFixed(2);
+                }
+            });
+        }
+
+        // 已传图大图预览(bootstrap modal)
+        var lb = document.createElement('div');
+        lb.className = 'modal fade';
+        lb.innerHTML = '<div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content"><div class="modal-body text-center"><img class="img-fluid" id="lb-img"></div></div></div>';
+        document.body.appendChild(lb);
+        document.querySelectorAll('.preview-img').forEach(function(el) {
+            el.style.cursor = 'pointer';
+            el.addEventListener('click', function() {
+                document.getElementById('lb-img').src = this.dataset.full;
+                bootstrap.Modal.getOrCreateInstance(lb).show();
+            });
+        });
+    });
+</script>
+{% endblock %}

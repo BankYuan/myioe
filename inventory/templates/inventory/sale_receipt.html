@@ -1,0 +1,148 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-hans">
+<head>
+<meta charset="UTF-8">
+<title>销售小票 #{{ sale.id }}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    background: #fff; color: #000;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  /* 屏幕预览: 居中显示一张小票 */
+  body { display: flex; justify-content: center; padding: 20px; background: #e9ecef; }
+  .receipt {
+    width: 58mm; background: #fff; padding: 2mm 2.5mm;
+    font-size: 11px; line-height: 1.5; color: #000;
+  }
+  .center { text-align: center; }
+  .bold { font-weight: bold; }
+  .shop-name { font-size: 15px; font-weight: bold; text-align: center; letter-spacing: 1px; margin-bottom: 1mm; }
+  .shop-info { text-align: center; font-size: 9px; line-height: 1.4; margin-bottom: 1mm; }
+  .divider { border-top: 1px dashed #000; margin: 1.5mm 0; }
+  .solid { border-top: 1px solid #000; margin: 1.5mm 0; }
+  .row { display: flex; justify-content: space-between; font-size: 11px; }
+  .row .k { color: #000; }
+  .row .v { font-weight: bold; }
+  /* 商品表头 */
+  .th { display: flex; font-size: 10px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 0.5mm; margin-bottom: 0.5mm; }
+  .th .name { flex: 1; }
+  .th .qty { width: 10mm; text-align: center; }
+  .th .sub { width: 16mm; text-align: right; }
+  /* 商品行 */
+  .item { margin-bottom: 1mm; font-size: 10.5px; }
+  .item .iname { font-weight: bold; }
+  .item .ispec { font-size: 9px; color: #000; }
+  .item .iline { display: flex; justify-content: space-between; font-size: 10px; }
+  .item .iline .qty { color: #000; }
+  .item .iline .sub { font-weight: bold; }
+  /* 金额 */
+  .total-row { display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; }
+  .total-row.grand { font-size: 14px; }
+  /* 会员 */
+  .member-row { display: flex; justify-content: space-between; font-size: 10px; }
+  /* 支付 */
+  .pay-row { display: flex; justify-content: space-between; font-size: 11px; }
+  .footer { text-align: center; font-size: 10px; margin-top: 1mm; line-height: 1.5; }
+  .no-print-bar {
+    position: fixed; top: 10px; right: 10px; display: flex; gap: 8px;
+    background: #fff; padding: 8px 12px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.2);
+  }
+  .no-print-bar button, .no-print-bar a {
+    padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer;
+    font-size: 13px; text-decoration: none;
+  }
+  .no-print-bar .p { background: #0d6efd; color: #fff; }
+  .no-print-bar .c { background: #6c757d; color: #fff; }
+
+  @media print {
+    body { display: block; padding: 0; background: #fff; }
+    .no-print-bar { display: none !important; }
+    .receipt { width: 58mm; padding: 1mm 2mm; margin: 0; }
+    @page { size: 58mm auto; margin: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="no-print-bar">
+  <button class="p" onclick="window.print()">🖨 打印小票</button>
+  <a class="c" href="{% url 'sale_detail' sale.id %}">← 返回</a>
+</div>
+
+<div class="receipt">
+  <!-- 抬头 -->
+  <div class="shop-name">广百圆鞋业</div>
+  <div class="shop-info">
+    电话：13647698457<br>
+    地址：重庆双路街道双北一街2号附7号
+  </div>
+  <div class="divider"></div>
+
+  <!-- 订单信息 -->
+  <div class="row"><span class="k">单号</span><span class="v">#{{ sale.id }}</span></div>
+  <div class="row"><span class="k">日期</span><span>{{ sale.created_at|date:"Y-m-d H:i" }}</span></div>
+  <div class="row"><span class="k">收银员</span><span>{{ sale.operator.username|default:"-" }}</span></div>
+  <div class="divider"></div>
+
+  <!-- 商品明细表头 -->
+  <div class="th"><span class="name">商品</span><span class="qty">数量</span><span class="sub">小计</span></div>
+  <!-- 商品行 -->
+  {% for item in items %}
+  <div class="item">
+    <div class="iname">{{ item.product.name }}</div>
+    <div class="ispec">
+      {% if item.product.model_no %}{{ item.product.model_no }}{% endif %}
+      {% if item.product.color %} · {{ item.product.color }}{% endif %}
+      {% if item.product.size %} · {{ item.product.size }}码{% endif %}
+    </div>
+    <div class="iline">
+      <span>¥{{ item.actual_price|floatformat:2 }} × <span class="qty">{{ item.quantity }}</span></span>
+      <span class="sub">¥{{ item.subtotal|floatformat:2 }}</span>
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="divider"></div>
+
+  <!-- 金额汇总 -->
+  <div class="total-row"><span>商品合计</span><span>¥{{ sale.total_amount|floatformat:2 }}</span></div>
+  {% if sale.discount_amount %}
+  <div class="total-row"><span>优惠减免</span><span>-¥{{ sale.discount_amount|floatformat:2 }}</span></div>
+  {% endif %}
+  {% if sale.balance_paid %}
+  <div class="total-row"><span>余额抵扣</span><span>-¥{{ sale.balance_paid|floatformat:2 }}</span></div>
+  {% endif %}
+  <div class="solid"></div>
+  <div class="total-row grand"><span>应收金额</span><span>¥{{ sale.final_amount|floatformat:2 }}</span></div>
+  <div class="divider"></div>
+
+  <!-- 会员信息 -->
+  {% if sale.member %}
+  <div class="member-row"><span>会员</span><span>{{ sale.member.name }} {{ sale.member.phone }}</span></div>
+  {% if sale.member.level %}
+  <div class="member-row"><span>等级</span><span>{{ sale.member.level.name }}</span></div>
+  {% endif %}
+  <div class="member-row"><span>积分</span><span>{{ sale.member.points }}（本单+{{ sale.points_earned|default:0 }}）</span></div>
+  <div class="divider"></div>
+  {% else %}
+  <div class="member-row"><span>客户</span><span>散客</span></div>
+  <div class="divider"></div>
+  {% endif %}
+
+  <!-- 支付方式 -->
+  <div class="pay-row"><span>支付方式</span><span class="bold">{{ sale.get_payment_method_display }}</span></div>
+  {% if sale.balance_paid %}
+  <div class="pay-row"><span>　余额支付</span><span>¥{{ sale.balance_paid|floatformat:2 }}</span></div>
+  {% endif %}
+  <div class="solid"></div>
+
+  <!-- 尾页 -->
+  <div class="footer">
+    谢谢惠顾<br>
+    凭小票7天内可退换
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,38 @@
+{% extends 'inventory/base.html' %}
+
+{% block title %}删除商品 - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-body">
+                <h4 class="mb-1">{{ product.name }}</h4>
+                <p class="text-muted small mb-3">条码:{{ product.barcode }} | 款号:{{ product.model_no|default:'-' }} | {{ product.category.name|default:'-' }}</p>
+                <hr>
+
+                <div class="alert alert-info">
+                    <strong><i class="bi bi-pause-circle"></i> 停用(推荐)</strong>
+                    <p class="mb-0 small">商品标记为不活跃,商品管理/库存管理默认隐藏,但<strong>库存、进货流水、销售记录都保留</strong>,账目完整。适合不再卖但留底的款。</p>
+                </div>
+                <form method="post" class="mb-4">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-warning"><i class="bi bi-pause-circle me-1"></i>停用该商品</button>
+                    <a href="{% url 'product_list' %}" class="btn btn-outline-secondary ms-2">取消</a>
+                </form>
+
+                <hr>
+                <div class="alert alert-danger">
+                    <strong><i class="bi bi-exclamation-triangle"></i> 彻底删除(危险·不可恢复)</strong>
+                    <p class="mb-0 small">从数据库物理删除该商品,<strong>同时删除其库存记录、进货流水、销售明细</strong>。不可恢复,影响历史账目和报表。<strong>仅用于删录错的垃圾数据,有销量的款不要用</strong>。</p>
+                </div>
+                <form method="post" onsubmit="return confirm('⚠️ 确认彻底删除「{{ product.name }}」?\n\n该商品的库存、进货流水、销售记录都会被永久删除,不可恢复!');">
+                    {% csrf_token %}
+                    <input type="hidden" name="force" value="1">
+                    <button type="submit" class="btn btn-danger"><i class="bi bi-trash me-1"></i>彻底删除(不可恢复)</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

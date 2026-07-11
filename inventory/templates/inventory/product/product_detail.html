@@ -1,0 +1,101 @@
+{% extends 'inventory/base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}{{ product.name }} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2 class="mb-0">{{ product.name }}</h2>
+                <small class="text-muted">条码 {{ product.barcode }}{% if product.model_no %} · 款号 {{ product.model_no }}{% endif %}</small>
+            </div>
+            <div>
+                <a href="{% url 'product_edit' product.id %}" class="btn btn-primary"><i class="bi bi-pencil me-1"></i> 编辑</a>
+                <a href="{% url 'product_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> 返回列表</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-body text-center">
+                {% if product.image %}
+                <img src="{{ product.image.url }}" class="img-fluid img-thumbnail" style="max-height: 240px;">
+                {% else %}
+                <div class="text-muted py-5"><i class="bi bi-image" style="font-size: 3rem;"></i><p class="mt-2 mb-0">暂无主图</p></div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header bg-light"><h6 class="mb-0">库存</h6></div>
+            <div class="card-body">
+                {% if inventory %}
+                <div class="fs-4 fw-bold">{{ inventory.quantity }} <span class="fs-6 text-muted fw-normal">件</span></div>
+                <div class="text-muted small">预警线 {{ inventory.warning_level }}
+                    {% if inventory.is_low_stock %}<span class="badge bg-danger ms-1">库存不足</span>{% endif %}
+                </div>
+                {% else %}
+                <span class="text-muted">无库存记录</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card mb-3">
+            <div class="card-header bg-light"><h6 class="mb-0">基本信息</h6></div>
+            <table class="table mb-0">
+                <tr><th style="width: 25%;">分类</th><td>{{ product.category.name|default:"-" }}</td></tr>
+                <tr><th>供应商</th><td>{% if product.supplier %}{{ product.supplier.name }}{% else %}-{% endif %}</td></tr>
+                <tr><th>颜色 / 尺码</th><td>{{ product.color|default:"-" }} / {{ product.size|default:"-" }}</td></tr>
+                <tr><th>售价 / 成本</th><td><span class="fw-bold">¥{{ product.price }}</span> / ¥{{ product.cost }}</td></tr>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% if images %}
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-light"><h6 class="mb-0">商品图片({{ images|length }})</h6></div>
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-3">
+                    {% for img in images %}
+                    <div class="text-center">
+                        <img src="{{ img.image.url }}" class="img-thumbnail" style="max-height: 120px;">
+                        <div><span class="badge bg-secondary">{{ img.get_image_type_display }}</span></div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+
+{% if sales_history %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-light"><h6 class="mb-0">近期销售</h6></div>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>销售单</th><th>时间</th><th>数量</th><th>金额</th></tr></thead>
+                    <tbody>
+                        {% for item in sales_history %}
+                        <tr><td>#{{ item.sale.id }}</td><td>{{ item.sale.created_at|date:"Y-m-d H:i" }}</td><td>{{ item.quantity }}</td><td>¥{{ item.subtotal }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,203 @@
+{% extends 'inventory/base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}扫码入库 - {{ block.super }}{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 class="card-title mb-0"><i class="bi bi-upc-scan me-1"></i>扫码入库</h2>
+                        <p class="text-muted mb-0">先填数量(整批),再扫条码 → 自动入库,可连续扫</p>
+                    </div>
+                    <a href="{% url 'inventory_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> 返回</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header bg-light"><h6 class="mb-0">扫码操作</h6></div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">数量(本次入库件数)</label>
+                    <input type="number" id="qty" class="form-control form-control-lg" value="1" min="1" step="1" inputmode="numeric">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">供应商(本次进货)</label>
+                    <select id="supplier" class="form-select">
+                        <option value="">(不关联供应商)</option>
+                        {% for s in suppliers %}
+                        <option value="{{ s.id }}">{{ s.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">条码(扫码枪扫入,或手输后回车)</label>
+                    <input type="text" id="barcode-input" class="form-control form-control-lg" autofocus autocomplete="off" placeholder="扫条码...">
+                </div>
+                <button id="scan-btn" class="btn btn-success btn-lg w-100"><i class="bi bi-box-arrow-in-down me-1"></i>确认入库</button>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header bg-light"><h6 class="mb-0">本次已扫</h6></div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead><tr><th>时间</th><th>商品</th><th>数量</th><th>操作后库存</th><th>贴纸</th></tr></thead>
+                        <tbody id="log-tbody"></tbody>
+                    </table>
+                </div>
+                <div class="text-muted small">本次共 <span id="total-count">0</span> 件,涉及 <span id="total-sku">0</span> 款</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 快速建档弹窗 -->
+<div class="modal fade" id="quickModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title">库内未找到该条码 — 快速建档并入库</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-2"><label class="form-label">条码</label><input type="text" id="qc-barcode" class="form-control" readonly></div>
+                <div class="mb-2"><label class="form-label">商品名称 *</label><input type="text" id="qc-name" class="form-control" required></div>
+                <div class="mb-2"><label class="form-label">款号</label><input type="text" id="qc-model_no" class="form-control" placeholder="同款共享(可选)"></div>
+                <div class="mb-2">
+                    <label class="form-label">鞋类目 *</label>
+                    <select id="qc-category" class="form-select" required>
+                        <option value="">请选择鞋类目</option>
+                        {% for pk, nm in category_choices %}
+                            {% if pk %}<option value="{{ pk }}">{{ nm }}</option>{% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="row">
+                    <div class="col mb-2"><label class="form-label">售价 *</label><input type="number" id="qc-price" class="form-control" step="0.01" required></div>
+                    <div class="col mb-2"><label class="form-label">成本价 *</label><input type="number" id="qc-cost" class="form-control" step="0.01" required></div>
+                    <div class="col mb-2"><label class="form-label">入库数量</label><input type="number" id="qc-qty" class="form-control" value="1" min="1"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button id="qc-submit" class="btn btn-success">建档并入库</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="toast" class="position-fixed top-0 end-0 m-3" style="z-index:1080;display:none;min-width:280px;"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let totalQty = 0;
+const skuSet = new Set();
+
+function getCsrf() {
+    const m = document.cookie.match(/csrftoken=([^;]+)/);
+    if (m) return m[1];
+    const inp = document.querySelector('[name=csrfmiddlewaretoken]');
+    return inp ? inp.value : '';
+}
+function toast(msg, ok = true) {
+    const el = document.getElementById('toast');
+    el.innerHTML = `<div class="alert alert-${ok ? 'success' : 'danger'} shadow">${msg}</div>`;
+    el.style.display = 'block';
+    clearTimeout(window.__t);
+    window.__t = setTimeout(() => { el.style.display = 'none'; }, 2500);
+}
+function addLog(name, qty, stock, productId) {
+    const t = new Date().toLocaleTimeString();
+    const printCell = productId
+        ? `<a href="{% url 'barcode_print' %}?ids=${productId}" target="_blank" class="badge bg-secondary text-decoration-none"><i class="bi bi-printer"></i> 标签</a>`
+        : '';
+    document.getElementById('log-tbody').insertAdjacentHTML('afterbegin',
+        `<tr><td>${t}</td><td>${name}</td><td>+${qty}</td><td>${stock}</td><td>${printCell}</td></tr>`);
+    totalQty += qty; skuSet.add(name);
+    document.getElementById('total-count').textContent = totalQty;
+    document.getElementById('total-sku').textContent = skuSet.size;
+}
+function focusBarcode() {
+    const b = document.getElementById('barcode-input');
+    b.value = ''; b.focus();
+}
+
+async function doScan() {
+    const barcode = document.getElementById('barcode-input').value.trim();
+    const qty = parseInt(document.getElementById('qty').value) || 1;
+    if (!barcode) return;
+    const fd = new FormData();
+    fd.append('barcode', barcode); fd.append('quantity', qty);
+    const supEl = document.getElementById('supplier');
+    if (supEl && supEl.value) fd.append('supplier', supEl.value);
+    try {
+        const r = await fetch('{% url "inventory_scan_in" %}', {
+            method: 'POST', body: fd,
+            headers: { 'X-CSRFToken': getCsrf(), 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const d = await r.json();
+        if (d.success) {
+            const low = d.low_stock ? ' <span class="text-danger">(库存偏低)</span>' : '';
+            toast(`✓ ${d.name} 入库 +${qty},当前库存 ${d.new_stock}${low}`);
+            addLog(d.name, qty, d.new_stock, d.product_id);
+            focusBarcode();
+        } else if (d.unknown) {
+            document.getElementById('qc-barcode').value = d.barcode;
+            document.getElementById('qc-qty').value = qty;
+            document.getElementById('qc-name').value = '';
+            document.getElementById('qc-category').value = '';
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('quickModal')).show();
+            setTimeout(() => document.getElementById('qc-name').focus(), 300);
+        } else {
+            toast(`✗ ${d.error || '操作失败'}`, false);
+        }
+    } catch (e) { toast('✗ 网络错误', false); }
+}
+
+document.getElementById('barcode-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); doScan(); }
+});
+document.getElementById('scan-btn').addEventListener('click', doScan);
+
+document.getElementById('qc-submit').addEventListener('click', async () => {
+    const fd = new FormData();
+    fd.append('barcode', document.getElementById('qc-barcode').value);
+    fd.append('name', document.getElementById('qc-name').value);
+    fd.append('model_no', document.getElementById('qc-model_no').value);
+    fd.append('category', document.getElementById('qc-category').value);
+    fd.append('price', document.getElementById('qc-price').value);
+    fd.append('cost', document.getElementById('qc-cost').value);
+    fd.append('quantity', document.getElementById('qc-qty').value);
+    const supEl2 = document.getElementById('supplier');
+    if (supEl2 && supEl2.value) fd.append('supplier', supEl2.value);
+    try {
+        const r = await fetch('{% url "scan_quick_create" %}', {
+            method: 'POST', body: fd,
+            headers: { 'X-CSRFToken': getCsrf(), 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const d = await r.json();
+        if (d.success) {
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('quickModal')).hide();
+            toast(`✓ 已建档 ${d.name} 并入库 +${d.quantity},当前库存 ${d.new_stock}`);
+            addLog(d.name, parseInt(d.quantity), d.new_stock, d.product_id);
+            focusBarcode();
+        } else {
+            toast('✗ ' + (d.error || '建档失败,请检查必填项'), false);
+        }
+    } catch (e) { toast('✗ 网络错误', false); }
+});
+</script>
+{% endblock %}

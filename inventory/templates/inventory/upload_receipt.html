@@ -1,0 +1,143 @@
+{% extends 'inventory/base.html' %}
+
+{% block title %}拍照识别单据 - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-7 offset-md-2">
+        <div class="card">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="bi bi-camera me-1"></i>拍照识别单据(进货/退货)</h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info py-2 mb-3">
+                    上传任意供应商的<strong>进货单</strong>或<strong>退货单</strong>截图(商路花/其他小程序/拍照都行),AI 自动判断方向并识别商品明细,你核对后提交(进货入库 / 退货出库)。
+                </div>
+                <form method="post" enctype="multipart/form-data" id="rec-form">
+                    {% csrf_token %}
+                    <!-- 大拖拽方框 -->
+                    <div id="drop-zone" class="drop-zone mb-3">
+                        <input type="file" name="image" id="image-input" accept="image/*" required hidden>
+                        <i class="bi bi-cloud-arrow-up-fill drop-icon"></i>
+                        <div class="drop-text">点击此处或拖拽图片到此处</div>
+                        <div class="drop-hint">支持 JPG / PNG,进货单或退货单截图</div>
+                    </div>
+                    <div id="preview" class="mb-3 text-center" style="display:none;">
+                        <img id="preview-img" class="img-thumbnail" style="max-height:320px;">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-lg w-100" id="rec-btn">
+                        <i class="bi bi-magic me-1"></i>上传并识别
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.drop-zone {
+    border: 2px dashed #6c757d;
+    border-radius: 12px;
+    padding: 50px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #f8f9fa;
+    color: #6c757d;
+}
+.drop-zone:hover {
+    border-color: #0d6efd;
+    background: #eaf3ff;
+    color: #0d6efd;
+}
+.drop-zone.dragover {
+    border-color: #0d6efd;
+    background: #dbe9ff;
+    color: #0d6efd;
+    transform: scale(1.01);
+}
+.drop-icon {
+    font-size: 48px;
+    display: block;
+    margin-bottom: 10px;
+}
+.drop-text {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+.drop-hint {
+    font-size: 13px;
+    color: #999;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    var dropZone = document.getElementById('drop-zone');
+    var input = document.getElementById('image-input');
+
+    // 点击方框 → 触发文件选择
+    dropZone.addEventListener('click', function() { input.click(); });
+
+    // 文件选择后预览
+    input.addEventListener('change', function(e) {
+        var f = e.target.files[0];
+        if (f) showPreview(f);
+    });
+
+    // 拖拽 —— 关键:阻止浏览器默认打开图片
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function(evt) {
+        dropZone.addEventListener(evt, function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+    });
+    // 整个 document 也要阻止,否则拖到页面其他地方浏览器会打开图片
+    ['dragover', 'drop'].forEach(function(evt) {
+        document.addEventListener(evt, function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+    });
+
+    // 拖入/拖过时高亮
+    ['dragenter', 'dragover'].forEach(function(evt) {
+        dropZone.addEventListener(evt, function() { dropZone.classList.add('dragover'); });
+    });
+    ['dragleave', 'drop'].forEach(function(evt) {
+        dropZone.addEventListener(evt, function() { dropZone.classList.remove('dragover'); });
+    });
+
+    // 放下文件
+    dropZone.addEventListener('drop', function(e) {
+        var files = e.dataTransfer.files;
+        if (files && files.length) {
+            var f = files[0];
+            if (!f.type.startsWith('image/')) {
+                alert('请拖拽图片文件(JPG/PNG)');
+                return;
+            }
+            // 把拖进来的文件赋给 input,表单才能提交
+            var dt = new DataTransfer();
+            dt.items.add(f);
+            input.files = dt.files;
+            showPreview(f);
+        }
+    });
+
+    function showPreview(f) {
+        document.getElementById('preview-img').src = URL.createObjectURL(f);
+        document.getElementById('preview').style.display = 'block';
+    }
+})();
+
+document.getElementById('rec-form').addEventListener('submit', function() {
+    var btn = document.getElementById('rec-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>AI 识别中,请稍候(约 10-30 秒)...';
+});
+</script>
+{% endblock %}

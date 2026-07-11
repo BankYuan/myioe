@@ -1,0 +1,32 @@
+{% extends 'inventory/base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}{{ form_title|default:"库存操作" }} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-7 offset-md-2">
+        <div class="card">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">{{ form_title|default:"库存操作" }}</h5>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    {{ form.product|as_crispy_field }}
+                    {{ form.quantity|as_crispy_field }}
+                    {{ form.notes|as_crispy_field }}
+                    <div class="d-flex justify-content-between mt-3">
+                        <a href="{% url 'inventory_list' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> 返回
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i> {{ submit_text|default:"确认" }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

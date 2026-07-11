@@ -1,0 +1,51 @@
+{% extends 'inventory/base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}库存调整 - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-7 offset-md-2">
+        <div class="card">
+            <div class="card-header bg-light"><h5 class="mb-0">库存调整</h5></div>
+            <div class="card-body">
+                <div class="alert alert-info py-2 mb-3">
+                    用于纠正账实差异(盘盈/盘亏)或修正录错的库存。日常进货请用「入库」,卖出/领用请用「出库」。
+                </div>
+                {% if current_quantity is not None %}
+                <div class="alert alert-secondary py-2 mb-3">
+                    当前库存:<strong class="fs-5">{{ current_quantity }}</strong>
+                </div>
+                {% endif %}
+                <form method="post">
+                    {% csrf_token %}
+                    {{ form.product|as_crispy_field }}
+                    <div class="mb-3">
+                        <label class="form-label">调整方式</label>
+                        <div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="adjustment_action" id="act-add" value="add" checked>
+                                <label class="form-check-label" for="act-add">增加(盘盈)</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="adjustment_action" id="act-subtract" value="subtract">
+                                <label class="form-check-label" for="act-subtract">减少(盘亏)</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="adjustment_action" id="act-set" value="set">
+                                <label class="form-check-label" for="act-set">设为指定数</label>
+                            </div>
+                        </div>
+                    </div>
+                    {{ form.quantity|as_crispy_field }}
+                    {{ form.notes|as_crispy_field }}
+                    <div class="d-flex justify-content-between mt-3">
+                        <a href="{% url 'inventory_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> 返回</a>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i> 确认调整</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
